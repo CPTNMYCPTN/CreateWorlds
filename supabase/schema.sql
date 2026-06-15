@@ -272,6 +272,23 @@ create policy "World members can create posts"
     )
   );
 
+-- Storage ------------------------------------------------------------
+
+insert into storage.buckets (id, name, public)
+values ('post-images', 'post-images', true)
+on conflict (id) do nothing;
+
+create policy "Anyone can view post images"
+  on storage.objects for select
+  using (bucket_id = 'post-images');
+
+create policy "Users can upload post images to their own folder"
+  on storage.objects for insert
+  with check (
+    bucket_id = 'post-images'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
 -- Character templates --------------------------------------------------------
 
 create table if not exists public.character_templates (

@@ -9,6 +9,7 @@ import {
   type CreatePostState,
   type ThreadPost,
 } from "./actions";
+import { PostEditor } from "./post-editor";
 
 export type SelectedThread = {
   id: string;
@@ -50,9 +51,10 @@ function PostItem({ post }: { post: ThreadPost }) {
             {new Date(post.created_at).toLocaleString()}
           </span>
         </div>
-        <p className="mt-1 whitespace-pre-wrap text-sm text-zinc-300">
-          {post.content}
-        </p>
+        <div
+          className="tiptap-content mt-1"
+          dangerouslySetInnerHTML={{ __html: post.content }}
+        />
       </div>
     </div>
   );
@@ -70,6 +72,8 @@ export function ThreadView({
   const [posts, setPosts] = useState<ThreadPost[]>([]);
   const [postsThreadId, setPostsThreadId] = useState<string | null>(null);
   const [content, setContent] = useState("");
+  const [isEmpty, setIsEmpty] = useState(true);
+  const [editorKey, setEditorKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -100,6 +104,8 @@ export function ThreadView({
     } else {
       setError(null);
       setContent("");
+      setIsEmpty(true);
+      setEditorKey((key) => key + 1);
       setPosts((current) => [...current, result.post!]);
     }
   }
@@ -129,29 +135,27 @@ export function ThreadView({
       </div>
 
       <div className="mt-6">
-        <label
-          htmlFor="first-post"
-          className="text-sm font-medium text-zinc-300"
-        >
+        <p className="text-sm font-medium text-zinc-300">
           {posts.length === 0 ? "Write the first post" : "Write a reply"}
-        </label>
+        </p>
         <form action={handleSubmit}>
-          <textarea
-            id="first-post"
-            name="content"
-            rows={5}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="Start the conversation..."
-            className="mt-2 w-full resize-none rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-50 outline-none placeholder:text-zinc-500 focus:border-violet-400/50"
-          />
+          <input type="hidden" name="content" value={content} />
+
+          <div className="mt-2">
+            <PostEditor
+              key={editorKey}
+              onChange={setContent}
+              onEmptyChange={setIsEmpty}
+              placeholder="Start the conversation..."
+            />
+          </div>
 
           {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
 
           <div className="mt-3 flex justify-end">
             <button
               type="submit"
-              disabled={pending || !content.trim()}
+              disabled={pending || isEmpty}
               className="inline-flex items-center justify-center rounded-full bg-violet-500 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {pending ? "Posting..." : "Post"}
