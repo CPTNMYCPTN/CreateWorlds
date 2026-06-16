@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
   ChevronDown,
@@ -13,6 +13,7 @@ import {
   Plus,
   X,
 } from "lucide-react";
+import { createClient } from "@/utils/supabase/client";
 import { createFolder, createThread, type CreateFolderState, type CreateThreadState } from "./actions";
 import type { WorldFolder, WorldThread } from "./types";
 
@@ -91,7 +92,7 @@ function AddThreadDialog({
                 required
                 autoFocus
                 placeholder="A new beginning"
-                className="mt-2 w-full rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-50 outline-none placeholder:text-zinc-500 focus:border-violet-400/50"
+                className="mt-2 w-full rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-50 outline-none placeholder:text-zinc-500 focus:border-[var(--world-accent)]/50"
               />
             </div>
 
@@ -100,7 +101,7 @@ function AddThreadDialog({
             <button
               type="submit"
               disabled={pending}
-              className="inline-flex items-center justify-center rounded-full bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center justify-center rounded-full bg-[var(--world-accent)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {pending ? "Creating..." : "Create thread"}
             </button>
@@ -117,6 +118,7 @@ function FolderItem({
   worldSlug,
   isOwner,
   selectedThreadId,
+  newThreadIds,
   onSelectThread,
   onThreadCreated,
 }: {
@@ -125,6 +127,7 @@ function FolderItem({
   worldSlug: string;
   isOwner: boolean;
   selectedThreadId: string | null;
+  newThreadIds: Set<string>;
   onSelectThread: (thread: WorldThread) => void;
   onThreadCreated: (folderId: string, thread: WorldThread) => void;
 }) {
@@ -159,14 +162,19 @@ function FolderItem({
                 onClick={() => onSelectThread(thread)}
                 className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 pl-9 text-left text-sm transition-colors ${
                   selectedThreadId === thread.id
-                    ? "bg-white/10 text-white"
+                    ? "bg-[var(--world-accent)]/15 text-white"
                     : "text-zinc-400 hover:bg-white/5 hover:text-white"
                 }`}
               >
                 <MessageSquare className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
                 <span className="truncate">{thread.title}</span>
+                {newThreadIds.has(thread.id) && (
+                  <span className="shrink-0 rounded-full bg-[var(--world-accent)] px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                    New
+                  </span>
+                )}
                 {thread.is_pinned && (
-                  <Pin className="h-3 w-3 shrink-0 text-violet-400" />
+                  <Pin className="h-3 w-3 shrink-0 text-[var(--world-accent)]" />
                 )}
                 {thread.is_locked && (
                   <Lock className="h-3 w-3 shrink-0 text-zinc-500" />
@@ -258,7 +266,7 @@ function AddFolderDialog({
                 required
                 autoFocus
                 placeholder="Characters"
-                className="mt-2 w-full rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-50 outline-none placeholder:text-zinc-500 focus:border-violet-400/50"
+                className="mt-2 w-full rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-50 outline-none placeholder:text-zinc-500 focus:border-[var(--world-accent)]/50"
               />
             </div>
 
@@ -267,7 +275,7 @@ function AddFolderDialog({
             <button
               type="submit"
               disabled={pending}
-              className="inline-flex items-center justify-center rounded-full bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center justify-center rounded-full bg-[var(--world-accent)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {pending ? "Creating..." : "Create folder"}
             </button>
@@ -294,6 +302,144 @@ export function WorldSidebar({
   onSelectThread: (thread: WorldThread) => void;
 }) {
   const [folders, setFolders] = useState(initialFolders);
+  const [newThreadIds, setNewThreadIds] = useState<Set<string>>(new Set());
+  const foldersRef = useRef(folders);
+
+  useEffect(() => {
+    foldersRef.current = folders;
+  }, [folders]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    let threadsChannel: ReturnType<typeof supabase.channel> | null = null;
+    let foldersChannel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
+
+    async function subscribe() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      console.log(
+        "[Realtime] session present:",
+        !!session,
+        session?.access_token?.slice(0, 20) ?? "none",
+      );
+
+      if (cancelled) return;
+
+      if (session) {
+        supabase.realtime.setAuth(session.access_token);
+      }
+
+      console.log(
+        "[Realtime] world-threads: subscribing with filter",
+        `world_id=eq.${worldId}`,
+      );
+
+      threadsChannel = supabase
+        .channel(`world-threads:${worldId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "world_threads",
+            filter: `world_id=eq.${worldId}`,
+          },
+          (payload) => {
+            console.log("[Realtime] world_threads INSERT received", payload);
+            const newThread = payload.new as {
+              id: string;
+              folder_id: string;
+              title: string;
+              is_pinned: boolean;
+              is_locked: boolean;
+            };
+
+            const alreadyExists = foldersRef.current.some((folder) =>
+              folder.threads.some((thread) => thread.id === newThread.id),
+            );
+
+            if (alreadyExists) {
+              console.log("[Realtime] world_threads: skipping duplicate", newThread.id);
+              return;
+            }
+
+            setFolders((current) =>
+              current.map((folder) =>
+                folder.id === newThread.folder_id
+                  ? {
+                      ...folder,
+                      threads: [
+                        ...folder.threads,
+                        {
+                          id: newThread.id,
+                          folder_id: newThread.folder_id,
+                          title: newThread.title,
+                          is_pinned: newThread.is_pinned,
+                          is_locked: newThread.is_locked,
+                        },
+                      ],
+                    }
+                  : folder,
+              ),
+            );
+
+            setNewThreadIds((current) => new Set(current).add(newThread.id));
+          },
+        )
+        .subscribe((status, err) => {
+          console.log("[Realtime] world-threads channel status:", status, err ?? "");
+        });
+
+      console.log(
+        "[Realtime] world-folders: subscribing with filter",
+        `world_id=eq.${worldId}`,
+      );
+
+      foldersChannel = supabase
+        .channel(`world-folders:${worldId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "world_folders",
+            filter: `world_id=eq.${worldId}`,
+          },
+          (payload) => {
+            console.log("[Realtime] world_folders INSERT fired — raw payload:", payload);
+            const newFolder = payload.new as { id: string; name: string };
+
+            const alreadyExists = foldersRef.current.some(
+              (folder) => folder.id === newFolder.id,
+            );
+
+            if (alreadyExists) {
+              console.log("[Realtime] world_folders: skipping duplicate", newFolder.id);
+              return;
+            }
+
+            setFolders((current) => [
+              ...current,
+              { id: newFolder.id, name: newFolder.name, threads: [] },
+            ]);
+          },
+        )
+        .subscribe((status, err) => {
+          console.log("[Realtime] world-folders channel status:", status, err ?? "");
+        });
+    }
+
+    subscribe();
+
+    return () => {
+      cancelled = true;
+      if (threadsChannel) supabase.removeChannel(threadsChannel);
+      if (foldersChannel) supabase.removeChannel(foldersChannel);
+    };
+  }, [worldId]);
 
   function handleThreadCreated(folderId: string, thread: WorldThread) {
     setFolders((current) =>
@@ -303,6 +449,18 @@ export function WorldSidebar({
           : folder,
       ),
     );
+  }
+
+  function handleSelectThread(thread: WorldThread) {
+    if (newThreadIds.has(thread.id)) {
+      setNewThreadIds((current) => {
+        const next = new Set(current);
+        next.delete(thread.id);
+        return next;
+      });
+    }
+
+    onSelectThread(thread);
   }
 
   return (
@@ -334,7 +492,8 @@ export function WorldSidebar({
               worldSlug={worldSlug}
               isOwner={isOwner}
               selectedThreadId={selectedThreadId}
-              onSelectThread={onSelectThread}
+              newThreadIds={newThreadIds}
+              onSelectThread={handleSelectThread}
               onThreadCreated={handleThreadCreated}
             />
           ))}

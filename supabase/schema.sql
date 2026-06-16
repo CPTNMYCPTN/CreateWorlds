@@ -347,6 +347,10 @@ create policy "Users can upload character avatars to their own folder"
 
 alter table public.worlds add column if not exists map_url text;
 
+-- World theming --------------------------------------------------------------
+
+alter table public.worlds add column if not exists settings jsonb not null default '{}'::jsonb;
+
 create table if not exists public.world_map_hotspots (
   id uuid primary key default gen_random_uuid(),
   world_id uuid not null references public.worlds (id) on delete cascade,
@@ -516,3 +520,29 @@ create policy "Templates used by visible characters are visible too"
       )
     )
   );
+
+-- Realtime ---------------------------------------------------------------
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'world_posts'
+  ) then
+    alter publication supabase_realtime add table public.world_posts;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'world_threads'
+  ) then
+    alter publication supabase_realtime add table public.world_threads;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'world_folders'
+  ) then
+    alter publication supabase_realtime add table public.world_folders;
+  end if;
+end $$;

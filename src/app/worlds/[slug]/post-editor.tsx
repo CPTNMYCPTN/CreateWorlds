@@ -73,7 +73,7 @@ function ToolbarButton({
       onClick={onClick}
       className={`rounded-lg p-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
         active
-          ? "bg-violet-500/20 text-violet-300"
+          ? "bg-[var(--world-accent,#a78bfa)]/20 text-[var(--world-accent,#a78bfa)]"
           : "text-zinc-400 hover:bg-white/5 hover:text-zinc-200"
       }`}
     >
@@ -486,7 +486,7 @@ export function PostEditor({
   }
 
   return (
-    <div className="rounded-lg border border-white/10 bg-white/[0.03] focus-within:border-violet-400/50">
+    <div className="rounded-lg border border-white/10 bg-white/[0.03] focus-within:border-[var(--world-accent,#a78bfa)]/50">
       <Toolbar editor={editor} />
       <div className="px-3 py-2">
         <EditorContent editor={editor} />

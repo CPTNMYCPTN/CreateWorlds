@@ -2,7 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/utils/supabase/server";
-import type { MapHotspot, MapHotspotLinkType, OwnedCharacter, WorldCharacter } from "./types";
+import type {
+  HeaderStyle,
+  MapHotspot,
+  MapHotspotLinkType,
+  OwnedCharacter,
+  WorldCharacter,
+  WorldFontFamily,
+  WorldSettings,
+  WorldTheme,
+} from "./types";
 
 export type CreateFolderState = {
   error: string | null;
@@ -325,4 +334,88 @@ export async function importCharacter(
 
   revalidatePath(`/worlds/${worldSlug}`);
   return { error: null, worldCharacter: data as unknown as WorldCharacter };
+}
+
+export type UpdateWorldThemeState = {
+  error: string | null;
+  theme?: WorldTheme;
+};
+
+const HEADER_STYLES: HeaderStyle[] = ["solid", "gradient", "transparent"];
+const FONT_FAMILIES: WorldFontFamily[] = ["default", "serif", "mono", "fantasy"];
+const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+
+export async function updateWorldTheme(
+  worldId: string,
+  worldSlug: string,
+  _prevState: UpdateWorldThemeState,
+  formData: FormData,
+): Promise<UpdateWorldThemeState> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "You must be signed in to update theme settings." };
+  }
+
+  const accentColor = (formData.get("accentColor") as string) ?? "";
+  const bgColor = (formData.get("bgColor") as string) ?? "";
+  const headerStyleRaw = (formData.get("headerStyle") as string) ?? "";
+  const fontFamilyRaw = (formData.get("fontFamily") as string) ?? "";
+  const customCss = ((formData.get("customCss") as string) ?? "").slice(0, 20000);
+
+  if (!HEX_COLOR_PATTERN.test(accentColor) || !HEX_COLOR_PATTERN.test(bgColor)) {
+    return { error: "Colors must be valid hex values." };
+  }
+
+  if (!HEADER_STYLES.includes(headerStyleRaw as HeaderStyle)) {
+    return { error: "Invalid header style." };
+  }
+
+  if (!FONT_FAMILIES.includes(fontFamilyRaw as WorldFontFamily)) {
+    return { error: "Invalid font family." };
+  }
+
+  const theme: WorldTheme = {
+    accentColor,
+    bgColor,
+    headerStyle: headerStyleRaw as HeaderStyle,
+    fontFamily: fontFamilyRaw as WorldFontFamily,
+    customCss,
+  };
+
+  const { data: world, error: fetchError } = await supabase
+    .from("worlds")
+    .select("settings, owner_id")
+    .eq("id", worldId)
+    .single();
+
+  if (fetchError || !world) {
+    return { error: fetchError?.message ?? "World not found." };
+  }
+
+  if (world.owner_id !== user.id) {
+    return { error: "Only the world owner can update theme settings." };
+  }
+
+  const settings: WorldSettings = {
+    ...(world.settings as WorldSettings),
+    theme,
+  };
+
+  const { error } = await supabase
+    .from("worlds")
+    .update({ settings })
+    .eq("id", worldId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath(`/worlds/${worldSlug}`);
+  revalidatePath(`/worlds/${worldSlug}/settings`);
+  return { error: null, theme };
 }

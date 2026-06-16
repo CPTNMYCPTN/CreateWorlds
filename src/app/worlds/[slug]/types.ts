@@ -29,3 +29,27 @@ export type WorldCharacter = {
   id: string;
   character: OwnedCharacter | null;
 };
+
+export type HeaderStyle = "solid" | "gradient" | "transparent";
+
+export type WorldFontFamily = "default" | "serif" | "mono" | "fantasy";
+
+export type WorldTheme = {
+  accentColor: string;
+  bgColor: string;
+  headerStyle: HeaderStyle;
+  fontFamily: WorldFontFamily;
+  customCss: string;
+};
+
+export type WorldSettings = {
+  theme?: Partial<WorldTheme>;
+};
+
+export const DEFAULT_WORLD_THEME: WorldTheme = {
+  accentColor: "#a78bfa",
+  bgColor: "#09090b",
+  headerStyle: "gradient",
+  fontFamily: "default",
+  customCss: "",
+};

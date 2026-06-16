@@ -25,6 +25,10 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+.world-page {
+  font-family: var(--world-font, inherit);
+}
+
 .tiptap-content {
   font-size: 0.875rem;
   line-height: 1.65;
@@ -102,14 +106,14 @@ body {
 }
 
 .tiptap-content a {
-  color: var(--color-violet-400);
+  color: var(--world-accent, var(--color-violet-400));
   text-decoration: underline;
-  text-decoration-color: rgba(167, 139, 250, 0.35);
+  text-decoration-color: color-mix(in srgb, var(--world-accent, var(--color-violet-400)) 35%, transparent);
   text-underline-offset: 2px;
 }
 
 .tiptap-content a:hover {
-  text-decoration-color: rgba(167, 139, 250, 0.7);
+  text-decoration-color: color-mix(in srgb, var(--world-accent, var(--color-violet-400)) 70%, transparent);
 }
 
 .tiptap-content mark {
@@ -180,7 +184,7 @@ body {
   content: "";
   position: absolute;
   inset: 0;
-  background: rgba(139, 92, 246, 0.25);
+  background: color-mix(in srgb, var(--world-accent, var(--color-violet-500)) 25%, transparent);
   pointer-events: none;
 }
 
@@ -190,7 +194,7 @@ body {
   bottom: -2px;
   right: -2px;
   width: 4px;
-  background-color: rgba(167, 139, 250, 0.6);
+  background-color: color-mix(in srgb, var(--world-accent, var(--color-violet-400)) 60%, transparent);
   pointer-events: none;
 }
 

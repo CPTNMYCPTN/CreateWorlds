@@ -115,7 +115,7 @@ function AddHotspotDialog({
                 required
                 autoFocus
                 placeholder="Capital City"
-                className="mt-2 w-full rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-50 outline-none placeholder:text-zinc-500 focus:border-violet-400/50"
+                className="mt-2 w-full rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-50 outline-none placeholder:text-zinc-500 focus:border-[var(--world-accent)]/50"
               />
             </div>
 
@@ -131,7 +131,7 @@ function AddHotspotDialog({
                 name="linkType"
                 value={linkType}
                 onChange={(e) => setLinkType(e.target.value as "" | MapHotspotLinkType)}
-                className="mt-2 w-full rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-50 outline-none focus:border-violet-400/50"
+                className="mt-2 w-full rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-50 outline-none focus:border-[var(--world-accent)]/50"
               >
                 <option value="" className="bg-zinc-900">
                   No link
@@ -164,7 +164,7 @@ function AddHotspotDialog({
                   id="hotspot-link-id"
                   name="linkId"
                   required
-                  className="mt-2 w-full rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-50 outline-none focus:border-violet-400/50"
+                  className="mt-2 w-full rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-50 outline-none focus:border-[var(--world-accent)]/50"
                 >
                   {folders.map((folder) => (
                     <option key={folder.id} value={folder.id} className="bg-zinc-900">
@@ -187,7 +187,7 @@ function AddHotspotDialog({
                   id="hotspot-link-id"
                   name="linkId"
                   required
-                  className="mt-2 w-full rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-50 outline-none focus:border-violet-400/50"
+                  className="mt-2 w-full rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-50 outline-none focus:border-[var(--world-accent)]/50"
                 >
                   {folders.map((folder) =>
                     folder.threads.length === 0 ? null : (
@@ -218,7 +218,7 @@ function AddHotspotDialog({
                   type="url"
                   required
                   placeholder="https://..."
-                  className="mt-2 w-full rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-50 outline-none placeholder:text-zinc-500 focus:border-violet-400/50"
+                  className="mt-2 w-full rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-50 outline-none placeholder:text-zinc-500 focus:border-[var(--world-accent)]/50"
                 />
               </div>
             )}
@@ -228,7 +228,7 @@ function AddHotspotDialog({
             <button
               type="submit"
               disabled={pending}
-              className="inline-flex items-center justify-center rounded-full bg-violet-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center justify-center rounded-full bg-[var(--world-accent)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {pending ? "Adding..." : "Add hotspot"}
             </button>
@@ -286,7 +286,7 @@ function HotspotPin({
         }}
         className="block"
       >
-        <MapPin className="h-7 w-7 fill-violet-500 text-violet-200 drop-shadow-lg transition-transform hover:scale-110" />
+        <MapPin className="h-7 w-7 fill-[var(--world-accent)] text-violet-200 drop-shadow-lg transition-transform hover:scale-110" />
       </button>
 
       {isOpen && (
@@ -299,7 +299,7 @@ function HotspotPin({
             <button
               type="button"
               onClick={() => onSelectThread(linkThread!)}
-              className="mt-1 inline-flex items-center gap-1 text-xs text-violet-400 transition-colors hover:text-violet-300"
+              className="mt-1 inline-flex items-center gap-1 text-xs text-[var(--world-accent)] transition-colors hover:opacity-80"
             >
               <MessageSquare className="h-3 w-3" />
               {linkLabel}
@@ -309,7 +309,7 @@ function HotspotPin({
               href={linkHref}
               target="_blank"
               rel="noreferrer"
-              className="mt-1 inline-flex items-center gap-1 text-xs text-violet-400 transition-colors hover:text-violet-300"
+              className="mt-1 inline-flex items-center gap-1 text-xs text-[var(--world-accent)] transition-colors hover:opacity-80"
             >
               <ExternalLink className="h-3 w-3" />
               {linkLabel}

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Lock, Pin, UserCircle2 } from "lucide-react";
+import { createClient } from "@/utils/supabase/client";
 import {
   createPost,
   getThreadPosts,
@@ -94,6 +95,57 @@ export function ThreadView({
     };
   }, [thread.id]);
 
+  useEffect(() => {
+    const supabase = createClient();
+
+    const channel = supabase
+      .channel(`world_posts:${thread.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "world_posts",
+          filter: `thread_id=eq.${thread.id}`,
+        },
+        async (payload) => {
+          const newPost = payload.new as {
+            id: string;
+            content: string;
+            created_at: string;
+            author_id: string;
+          };
+
+          const { data: author } = await supabase
+            .from("profiles")
+            .select("username, avatar_url")
+            .eq("id", newPost.author_id)
+            .single();
+
+          setPosts((current) => {
+            if (current.some((post) => post.id === newPost.id)) {
+              return current;
+            }
+
+            return [
+              ...current,
+              {
+                id: newPost.id,
+                content: newPost.content,
+                created_at: newPost.created_at,
+                author: author ?? null,
+              },
+            ];
+          });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [thread.id]);
+
   async function handleSubmit(formData: FormData) {
     setPending(true);
     const result = await createPost(worldId, thread.id, worldSlug, initialPostState, formData);
@@ -116,7 +168,7 @@ export function ThreadView({
         <h2 className="text-xl font-semibold tracking-tight">
           {thread.title}
         </h2>
-        {thread.is_pinned && <Pin className="h-4 w-4 text-violet-400" />}
+        {thread.is_pinned && <Pin className="h-4 w-4 text-[var(--world-accent)]" />}
         {thread.is_locked && <Lock className="h-4 w-4 text-zinc-500" />}
       </div>
 
@@ -156,7 +208,7 @@ export function ThreadView({
             <button
               type="submit"
               disabled={pending || isEmpty}
-              className="inline-flex items-center justify-center rounded-full bg-violet-500 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center justify-center rounded-full bg-[var(--world-accent)] px-5 py-2 text-sm font-semibold text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {pending ? "Posting..." : "Post"}
             </button>
