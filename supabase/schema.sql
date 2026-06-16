@@ -193,6 +193,8 @@ create policy "World members can create threads"
 create table if not exists public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
   username text not null,
+  display_name text,
+  bio text,
   avatar_url text,
   created_at timestamptz not null default now()
 );
@@ -206,6 +208,11 @@ create policy "Profiles are visible to everyone"
 create policy "Users can update their own profile"
   on public.profiles for update
   using (id = auth.uid());
+
+-- Migration: add columns to existing profiles tables.
+alter table public.profiles
+  add column if not exists display_name text,
+  add column if not exists bio text;
 
 -- Create a profile automatically whenever a new user signs up.
 create or replace function public.handle_new_user()
@@ -325,6 +332,10 @@ create policy "Users can manage their own characters"
   on public.characters for all
   using (owner_id = auth.uid())
   with check (owner_id = auth.uid());
+
+create policy "Characters are publicly visible"
+  on public.characters for select
+  using (true);
 
 -- Storage ------------------------------------------------------------
 
@@ -546,3 +557,27 @@ begin
     alter publication supabase_realtime add table public.world_folders;
   end if;
 end $$;
+
+-- Profile avatars storage -----------------------------------------------
+
+insert into storage.buckets (id, name, public)
+values ('profile-avatars', 'profile-avatars', true)
+on conflict (id) do nothing;
+
+create policy "Anyone can view profile avatars"
+  on storage.objects for select
+  using (bucket_id = 'profile-avatars');
+
+create policy "Users can upload their own profile avatar"
+  on storage.objects for insert
+  with check (
+    bucket_id = 'profile-avatars'
+    and auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+create policy "Users can update their own profile avatar"
+  on storage.objects for update
+  using (
+    bucket_id = 'profile-avatars'
+    and auth.uid()::text = (storage.foldername(name))[1]
+  );

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { Lock, Pin, UserCircle2 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import {
@@ -45,9 +46,16 @@ function PostItem({ post }: { post: ThreadPost }) {
       <PostAuthorAvatar avatarUrl={post.author?.avatar_url} />
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
-          <span className="text-sm font-semibold text-zinc-200">
-            {post.author?.username ?? "Unknown"}
-          </span>
+          {post.author ? (
+            <Link
+              href={`/users/${post.author.username}`}
+              className="text-sm font-semibold text-zinc-200 transition-colors hover:text-white"
+            >
+              {post.author.username}
+            </Link>
+          ) : (
+            <span className="text-sm font-semibold text-zinc-500">Unknown</span>
+          )}
           <span className="text-xs text-zinc-500">
             {new Date(post.created_at).toLocaleString()}
           </span>

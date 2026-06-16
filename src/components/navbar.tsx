@@ -1,13 +1,21 @@
 import Link from "next/link";
 import { Sparkles } from "lucide-react";
 import { createClient } from "@/utils/supabase/server";
-import { logout } from "@/app/actions";
+import { UserMenu } from "./user-menu";
 
 export async function Navbar() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  const { data: profile } = user
+    ? await supabase
+        .from("profiles")
+        .select("username, avatar_url")
+        .eq("id", user.id)
+        .maybeSingle()
+    : { data: null };
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-zinc-950/80 backdrop-blur-md">
@@ -20,16 +28,9 @@ export async function Navbar() {
           CreateWorlds
         </Link>
 
-        {user ? (
-          <form action={logout}>
-            <button
-              type="submit"
-              className="rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-zinc-300 transition-colors hover:border-white/20 hover:text-white"
-            >
-              Log out
-            </button>
-          </form>
-        ) : (
+        {user && profile ? (
+          <UserMenu username={profile.username} avatarUrl={profile.avatar_url ?? null} />
+        ) : user ? null : (
           <div className="flex items-center gap-3 text-sm font-medium">
             <Link
               href="/login"
