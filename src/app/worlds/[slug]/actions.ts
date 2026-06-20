@@ -341,9 +341,66 @@ export type UpdateWorldThemeState = {
   theme?: WorldTheme;
 };
 
+export type UpdateWorldVisibilityState = {
+  error: string | null;
+  isPublic?: boolean;
+};
+
 const HEADER_STYLES: HeaderStyle[] = ["solid", "gradient", "transparent"];
 const FONT_FAMILIES: WorldFontFamily[] = ["default", "serif", "mono", "fantasy"];
 const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+
+export async function updateWorldVisibility(
+  worldId: string,
+  worldSlug: string,
+  _prevState: UpdateWorldVisibilityState,
+  formData: FormData,
+): Promise<UpdateWorldVisibilityState> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "You must be signed in to update visibility settings." };
+  }
+
+  const visibilityRaw = (formData.get("visibility") as string) ?? "";
+
+  if (visibilityRaw !== "public" && visibilityRaw !== "private") {
+    return { error: "Invalid visibility setting." };
+  }
+
+  const isPublic = visibilityRaw === "public";
+
+  const { data: world, error: fetchError } = await supabase
+    .from("worlds")
+    .select("owner_id")
+    .eq("id", worldId)
+    .single();
+
+  if (fetchError || !world) {
+    return { error: fetchError?.message ?? "World not found." };
+  }
+
+  if (world.owner_id !== user.id) {
+    return { error: "Only the world owner can update visibility settings." };
+  }
+
+  const { error } = await supabase
+    .from("worlds")
+    .update({ is_public: isPublic })
+    .eq("id", worldId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath(`/worlds/${worldSlug}`);
+  revalidatePath(`/worlds/${worldSlug}/settings`);
+  return { error: null, isPublic };
+}
 
 export async function updateWorldTheme(
   worldId: string,

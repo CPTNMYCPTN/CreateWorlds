@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { Navbar } from "@/components/navbar";
 import { createClient } from "@/utils/supabase/server";
 import { WorldThemeForm } from "../world-theme-form";
+import { WorldVisibilityForm } from "../world-visibility-form";
 import { DEFAULT_WORLD_THEME, type WorldSettings } from "../types";
 
 export default async function WorldSettingsPage({
@@ -24,7 +25,7 @@ export default async function WorldSettingsPage({
 
   const { data: world } = await supabase
     .from("worlds")
-    .select("id, name, slug, owner_id, settings")
+    .select("id, name, slug, owner_id, settings, is_public")
     .eq("slug", slug)
     .single();
 
@@ -59,6 +60,19 @@ export default async function WorldSettingsPage({
         </h1>
 
         <section className="mt-8">
+          <h2 className="text-lg font-semibold text-zinc-100">Visibility</h2>
+          <p className="mt-1 text-sm text-zinc-400">
+            Control who can view this world and its content.
+          </p>
+
+          <WorldVisibilityForm
+            worldId={world.id}
+            worldSlug={world.slug}
+            isPublic={world.is_public}
+          />
+        </section>
+
+        <section className="mt-10">
           <h2 className="text-lg font-semibold text-zinc-100">Theme</h2>
           <p className="mt-1 text-sm text-zinc-400">
             Customize the visual appearance of your world. Changes apply to
