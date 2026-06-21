@@ -15,27 +15,6 @@ type InviteWorldPreview = {
   icon_url: string | null;
 };
 
-function logSupabaseError(label: string, code: string, error: unknown) {
-  if (!error) {
-    return;
-  }
-
-  const err = error as {
-    message?: string;
-    code?: string;
-    details?: string;
-    hint?: string;
-  };
-
-  console.error(`[invite/${code}] ${label}`, {
-    message: err.message,
-    code: err.code,
-    details: err.details,
-    hint: err.hint,
-    raw: JSON.stringify(error),
-  });
-}
-
 export default async function InvitePage({
   params,
   searchParams,
@@ -58,8 +37,6 @@ export default async function InvitePage({
     .select("id, code, expires_at, max_uses, uses, world_id")
     .eq("code", code)
     .single();
-
-  logSupabaseError("world_invites lookup failed", code, inviteError);
 
   if (inviteError || !invite) {
     return (
@@ -85,12 +62,9 @@ export default async function InvitePage({
 
   // Bypasses the normal worlds RLS (which hides private worlds from
   // non-members) so the preview can render before the viewer has joined.
-  const { data: worldRows, error: worldError } = await supabase.rpc(
-    "get_invite_world",
-    { invite_code: code },
-  );
-
-  logSupabaseError("get_invite_world rpc failed", code, worldError);
+  const { data: worldRows } = await supabase.rpc("get_invite_world", {
+    invite_code: code,
+  });
 
   const world = (worldRows?.[0] as InviteWorldPreview | undefined) ?? null;
 
@@ -113,11 +87,6 @@ export default async function InvitePage({
         </div>
       );
     }
-
-    console.error(
-      `[invite/${code}] get_invite_world returned no rows for an unexpired, non-maxed-out invite`,
-      JSON.stringify({ invite }),
-    );
 
     return (
       <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-6 py-16 text-zinc-50">
@@ -156,16 +125,14 @@ export default async function InvitePage({
     );
   }
 
-  const { data: membership, error: membershipError } = user
+  const { data: membership } = user
     ? await supabase
         .from("world_members")
         .select("user_id")
         .eq("world_id", world.id)
         .eq("user_id", user.id)
         .maybeSingle()
-    : { data: null, error: null };
-
-  logSupabaseError("membership lookup failed", code, membershipError);
+    : { data: null };
 
   if (membership) {
     redirect(`/worlds/${world.slug}`);

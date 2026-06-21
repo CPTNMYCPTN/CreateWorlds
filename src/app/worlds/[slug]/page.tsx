@@ -39,7 +39,7 @@ export default async function WorldPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: world, error: worldError } = await supabase
+  const { data: world } = await supabase
     .from("worlds")
     .select(
       "id, name, slug, description, is_public, banner_url, icon_url, owner_id, map_url, settings",
@@ -48,15 +48,6 @@ export default async function WorldPage({
     .single();
 
   if (!world) {
-    console.error(`[worlds/${slug}] world lookup returned no data`, {
-      slug,
-      userId: user?.id ?? null,
-      message: worldError?.message,
-      code: worldError?.code,
-      details: worldError?.details,
-      hint: worldError?.hint,
-      raw: JSON.stringify(worldError),
-    });
     notFound();
   }
 
@@ -73,7 +64,7 @@ export default async function WorldPage({
 
   const [
     { count: memberCount },
-    { data: memberRows, error: memberRowsError },
+    { data: memberRows },
     { data: folders },
     { data: threads },
     { data: hotspots },
@@ -141,23 +132,6 @@ export default async function WorldPage({
 
   const isMember = !!membership;
 
-  console.log(
-    `[worlds/${slug}] memberRows fetch`,
-    JSON.stringify({
-      worldId: world.id,
-      rowCount: memberRows?.length ?? 0,
-      rows: memberRows,
-      error: memberRowsError
-        ? {
-            message: memberRowsError.message,
-            code: memberRowsError.code,
-            details: memberRowsError.details,
-            hint: memberRowsError.hint,
-          }
-        : null,
-    }),
-  );
-
   const currentMemberRow = memberRows?.find((m) => m.user_id === user?.id) ?? null;
   const isAdmin = currentMemberRow?.role === "admin";
 
@@ -165,30 +139,13 @@ export default async function WorldPage({
     new Set((memberRows ?? []).map((m) => m.user_id)),
   );
 
-  const { data: memberProfiles, error: memberProfilesError } =
+  const { data: memberProfiles } =
     memberUserIds.length > 0
       ? await supabase
           .from("profiles")
           .select("id, username, display_name, avatar_url")
           .in("id", memberUserIds)
-      : { data: [], error: null };
-
-  console.log(
-    `[worlds/${slug}] memberProfiles fetch`,
-    JSON.stringify({
-      memberUserIds,
-      rowCount: memberProfiles?.length ?? 0,
-      rows: memberProfiles,
-      error: memberProfilesError
-        ? {
-            message: memberProfilesError.message,
-            code: memberProfilesError.code,
-            details: memberProfilesError.details,
-            hint: memberProfilesError.hint,
-          }
-        : null,
-    }),
-  );
+      : { data: [] };
 
   const memberProfileMap = new Map(
     (memberProfiles ?? []).map((profileRow) => [profileRow.id, profileRow]),
@@ -209,11 +166,6 @@ export default async function WorldPage({
       if (b.role === "owner") return 1;
       return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     });
-
-  console.log(
-    `[worlds/${slug}] resolved members for Members tab`,
-    JSON.stringify({ count: members.length, members }),
-  );
 
   const hotspotThreadIds = Array.from(
     new Set(
