@@ -71,6 +71,7 @@ export function WorldWorkspace({
   description,
   mapUrl,
   hotspots,
+  threadSnippets,
   characters,
   currentUser,
 }: {
@@ -82,10 +83,12 @@ export function WorldWorkspace({
   description: string;
   mapUrl: string | null;
   hotspots: MapHotspot[];
+  threadSnippets: Record<string, string>;
   characters: WorldCharacter[];
   currentUser: { id: string; username: string; avatarUrl: string | null } | null;
 }) {
   const [selectedThread, setSelectedThread] = useState<WorldThread | null>(null);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([]);
   const [guestId] = useState(() => crypto.randomUUID());
 
@@ -134,12 +137,21 @@ export function WorldWorkspace({
           folders={folders}
           isOwner={isOwner}
           selectedThreadId={selectedThread?.id ?? null}
-          onSelectThread={setSelectedThread}
+          selectedFolderId={selectedFolderId}
+          onSelectThread={(thread) => {
+            setSelectedThread(thread);
+            setSelectedFolderId(null);
+          }}
         />
 
         <main className="flex-1 rounded-2xl border border-white/10 bg-white/[0.02] p-6">
           {selectedThread ? (
-            <ThreadView thread={selectedThread} worldId={worldId} worldSlug={worldSlug} />
+            <ThreadView
+              thread={selectedThread}
+              worldId={worldId}
+              worldSlug={worldSlug}
+              onBack={() => setSelectedThread(null)}
+            />
           ) : (
             <Tabs.Root defaultValue="about">
               <Tabs.List className="flex gap-1 border-b border-white/10">
@@ -189,9 +201,17 @@ export function WorldWorkspace({
                   worldSlug={worldSlug}
                   mapUrl={mapUrl}
                   hotspots={hotspots}
+                  threadSnippets={threadSnippets}
                   isOwner={isOwner}
                   folders={folders}
-                  onSelectThread={setSelectedThread}
+                  onSelectThread={(thread) => {
+                    setSelectedThread(thread);
+                    setSelectedFolderId(null);
+                  }}
+                  onNavigateFolder={(folderId) => {
+                    setSelectedFolderId(folderId);
+                    setSelectedThread(null);
+                  }}
                 />
               </Tabs.Content>
 

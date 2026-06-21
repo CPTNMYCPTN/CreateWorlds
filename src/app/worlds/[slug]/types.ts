@@ -10,13 +10,19 @@ export type WorldFolder = {
 
 export type MapHotspotLinkType = "folder" | "thread" | "url";
 
+export type MapHotspotLink = {
+  id: string;
+  link_type: MapHotspotLinkType;
+  link_id: string;
+  label: string | null;
+};
+
 export type MapHotspot = {
   id: string;
   label: string;
-  link_type: MapHotspotLinkType | null;
-  link_id: string | null;
   x_percent: number;
   y_percent: number;
+  links: MapHotspotLink[];
 };
 
 export type OwnedCharacter = {

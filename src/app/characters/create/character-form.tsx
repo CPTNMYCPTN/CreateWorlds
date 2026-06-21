@@ -96,8 +96,10 @@ function FieldInput({ field }: { field: TemplateField }) {
 
 export function CharacterForm({
   templates,
+  worldId,
 }: {
   templates: CharacterTemplate[];
+  worldId: string | null;
 }) {
   const [state, formAction, pending] = useActionState(
     createCharacter,
@@ -226,6 +228,7 @@ export function CharacterForm({
 
       <input type="hidden" name="templateId" value={selectedTemplate?.id ?? ""} />
       <input type="hidden" name="fields" value={JSON.stringify(fields)} />
+      {worldId && <input type="hidden" name="world" value={worldId} />}
 
       <button
         type="submit"

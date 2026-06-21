@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Plus, UserCircle2, X } from "lucide-react";
 import { getMyCharacters, importCharacter } from "./actions";
@@ -24,6 +25,7 @@ function AddCharacterDialog({
   const [characters, setCharacters] = useState<OwnedCharacter[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [importingId, setImportingId] = useState<string | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     getMyCharacters()
@@ -86,37 +88,46 @@ function AddCharacterDialog({
                   : "All your characters are already in this world."}
               </p>
             ) : (
-              availableCharacters.map((character) => (
-                <button
-                  key={character.id}
-                  type="button"
-                  disabled={importingId !== null}
-                  onClick={() => handleImport(character.id)}
-                  className="flex items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-white/10 bg-zinc-800">
-                    {character.avatar_url ? (
-                      <Image
-                        src={character.avatar_url}
-                        alt=""
-                        width={40}
-                        height={40}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <UserCircle2 className="h-full w-full text-zinc-600" />
-                    )}
-                  </div>
-                  <span className="truncate text-sm font-medium text-zinc-200">
-                    {character.name}
-                  </span>
-                  {importingId === character.id && (
-                    <span className="ml-auto text-xs text-zinc-500">
-                      Adding...
+              <>
+                {availableCharacters.map((character) => (
+                  <button
+                    key={character.id}
+                    type="button"
+                    disabled={importingId !== null}
+                    onClick={() => handleImport(character.id)}
+                    className="flex items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-white/10 bg-zinc-800">
+                      {character.avatar_url ? (
+                        <Image
+                          src={character.avatar_url}
+                          alt=""
+                          width={40}
+                          height={40}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <UserCircle2 className="h-full w-full text-zinc-600" />
+                      )}
+                    </div>
+                    <span className="truncate text-sm font-medium text-zinc-200">
+                      {character.name}
                     </span>
-                  )}
+                    {importingId === character.id && (
+                      <span className="ml-auto text-xs text-zinc-500">
+                        Adding...
+                      </span>
+                    )}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => router.push(`/characters/create?world=${worldId}`)}
+                  className="mt-2 flex items-center justify-center rounded-lg border border-dashed border-white/10 px-3 py-2 text-sm font-medium text-zinc-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
+                >
+                  + Create a character
                 </button>
-              ))
+              </>
             )}
           </div>
 

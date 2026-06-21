@@ -4,7 +4,12 @@ import { createClient } from "@/utils/supabase/server";
 import { CharacterForm } from "./character-form";
 import type { CharacterTemplate } from "../types";
 
-export default async function CreateCharacterPage() {
+export default async function CreateCharacterPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ world?: string }>;
+}) {
+  const { world } = await searchParams;
   const supabase = await createClient();
 
   const {
@@ -32,7 +37,10 @@ export default async function CreateCharacterPage() {
           Pick a template to get started, or build your character from
           scratch.
         </p>
-        <CharacterForm templates={(templates ?? []) as CharacterTemplate[]} />
+        <CharacterForm
+          templates={(templates ?? []) as CharacterTemplate[]}
+          worldId={typeof world === "string" ? world : null}
+        />
       </main>
     </div>
   );

@@ -45,6 +45,7 @@ export async function createCharacter(
 
   const name = ((formData.get("name") as string) ?? "").trim();
   const templateId = (formData.get("templateId") as string) || null;
+  const worldId = (formData.get("world") as string) || null;
   const fieldsRaw = (formData.get("fields") as string) ?? "[]";
   const avatar = formData.get("avatar") as File | null;
 
@@ -115,16 +116,38 @@ export async function createCharacter(
     };
   }
 
-  const { error } = await supabase.from("characters").insert({
-    owner_id: user.id,
-    template_id: templateId,
-    name,
-    avatar_url: avatarUrl,
-    field_values: fieldValues,
-  });
+  const { data: createdCharacter, error: insertError } = await supabase
+    .from("characters")
+    .insert({
+      owner_id: user.id,
+      template_id: templateId,
+      name,
+      avatar_url: avatarUrl,
+      field_values: fieldValues,
+    })
+    .select("id")
+    .single();
 
-  if (error) {
-    return { error: error.message };
+  if (insertError || !createdCharacter) {
+    return { error: insertError?.message ?? "Failed to create character." };
+  }
+
+  if (worldId) {
+    const { data: world } = await supabase
+      .from("worlds")
+      .select("slug")
+      .eq("id", worldId)
+      .single();
+
+    if (world) {
+      const { error: importError } = await supabase
+        .from("world_characters")
+        .insert({ world_id: worldId, character_id: createdCharacter.id });
+
+      if (!importError) {
+        redirect(`/worlds/${world.slug}`);
+      }
+    }
   }
 
   redirect("/");

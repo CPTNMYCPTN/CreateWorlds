@@ -23,10 +23,23 @@ create table if not exists public.world_members (
   unique (world_id, user_id)
 );
 
+create table if not exists public.world_invites (
+  id uuid primary key default gen_random_uuid(),
+  world_id uuid not null references public.worlds (id) on delete cascade,
+  code text not null unique,
+  created_by uuid not null references auth.users (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz,
+  max_uses integer,
+  uses integer not null default 0,
+  check (max_uses is null or max_uses > 0)
+);
+
 -- Row level security -----------------------------------------------------
 
 alter table public.worlds enable row level security;
 alter table public.world_members enable row level security;
+alter table public.world_invites enable row level security;
 
 create policy "Worlds are visible to owners, members, and the public if public"
   on public.worlds for select
@@ -61,12 +74,41 @@ create policy "Members are visible to other members of the same world"
     )
   );
 
-create policy "World owners can add members (e.g. themselves as owner)"
+create policy "Users can join worlds they are invited to or public worlds"
   on public.world_members for insert
+  with check (
+    user_id = auth.uid()
+    and (
+      exists (
+        select 1 from public.worlds w
+        where w.id = world_id and (
+          w.is_public
+          or w.owner_id = auth.uid()
+        )
+      )
+      or exists (
+        select 1 from public.world_invites i
+        where i.world_id = world_id
+      )
+    )
+  );
+
+create policy "Anyone can read invites by code"
+  on public.world_invites for select
+  using (true);
+
+create policy "Owners can manage invites for their worlds"
+  on public.world_invites for all
+  using (
+    exists (
+      select 1 from public.worlds w
+      where w.id = world_invites.world_id and w.owner_id = auth.uid()
+    )
+  )
   with check (
     exists (
       select 1 from public.worlds w
-      where w.id = world_id and w.owner_id = auth.uid()
+      where w.id = world_invites.world_id and w.owner_id = auth.uid()
     )
   );
 
@@ -246,6 +288,7 @@ create table if not exists public.world_posts (
   thread_id uuid not null references public.world_threads (id) on delete cascade,
   world_id uuid not null references public.worlds (id) on delete cascade,
   author_id uuid not null references public.profiles (id) on delete cascade,
+  character_id uuid references public.characters (id) on delete set null,
   content text not null,
   created_at timestamptz not null default now()
 );
@@ -367,18 +410,43 @@ create table if not exists public.world_map_hotspots (
   world_id uuid not null references public.worlds (id) on delete cascade,
   map_image_url text not null,
   label text not null,
-  link_type text,
-  link_id text,
   x_percent numeric not null,
   y_percent numeric not null,
-  created_at timestamptz not null default now(),
-  constraint world_map_hotspots_link_check check (
-    (link_type is null and link_id is null)
-    or (link_type in ('folder', 'thread', 'url') and link_id is not null)
-  )
+  created_at timestamptz not null default now()
 );
 
+create table if not exists public.world_hotspot_links (
+  id uuid primary key default gen_random_uuid(),
+  hotspot_id uuid not null references public.world_map_hotspots (id) on delete cascade,
+  link_type text not null check (link_type in ('folder', 'thread', 'url')),
+  link_id text not null,
+  label text,
+  created_at timestamptz not null default now()
+);
+
+-- Migrate away from the old single-link model: copy any existing link into
+-- world_hotspot_links before dropping the columns from world_map_hotspots.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'world_map_hotspots'
+      and column_name = 'link_type'
+  ) then
+    insert into public.world_hotspot_links (hotspot_id, link_type, link_id)
+    select id, link_type, link_id
+    from public.world_map_hotspots
+    where link_type is not null and link_id is not null;
+  end if;
+end $$;
+
+alter table public.world_map_hotspots drop constraint if exists world_map_hotspots_link_check;
+alter table public.world_map_hotspots drop column if exists link_type;
+alter table public.world_map_hotspots drop column if exists link_id;
+
 alter table public.world_map_hotspots enable row level security;
+alter table public.world_hotspot_links enable row level security;
 
 create policy "Hotspots are visible to anyone who can see the world"
   on public.world_map_hotspots for select
@@ -409,6 +477,43 @@ create policy "World owners can manage map hotspots"
     exists (
       select 1 from public.worlds w
       where w.id = world_map_hotspots.world_id and w.owner_id = auth.uid()
+    )
+  );
+
+create policy "Hotspot links are visible to anyone who can see the world"
+  on public.world_hotspot_links for select
+  using (
+    exists (
+      select 1 from public.world_map_hotspots h
+      join public.worlds w on w.id = h.world_id
+      where h.id = world_hotspot_links.hotspot_id
+      and (
+        w.is_public
+        or w.owner_id = auth.uid()
+        or exists (
+          select 1 from public.world_members m
+          where m.world_id = w.id and m.user_id = auth.uid()
+        )
+      )
+    )
+  );
+
+create policy "World owners can manage hotspot links"
+  on public.world_hotspot_links for all
+  using (
+    exists (
+      select 1 from public.world_map_hotspots h
+      join public.worlds w on w.id = h.world_id
+      where h.id = world_hotspot_links.hotspot_id
+      and w.owner_id = auth.uid()
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.world_map_hotspots h
+      join public.worlds w on w.id = h.world_id
+      where h.id = world_hotspot_links.hotspot_id
+      and w.owner_id = auth.uid()
     )
   );
 

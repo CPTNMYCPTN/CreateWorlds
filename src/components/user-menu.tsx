@@ -54,6 +54,14 @@ export function UserMenu({
               View profile
             </Link>
             <Link
+              href="/characters/create"
+              onClick={() => setOpen(false)}
+              className="flex items-center gap-2.5 px-3 py-2 text-sm text-zinc-300 transition-colors hover:bg-white/5 hover:text-white"
+            >
+              <User className="h-4 w-4" />
+              Create a character
+            </Link>
+            <Link
               href="/settings/profile"
               onClick={() => setOpen(false)}
               className="flex items-center gap-2.5 px-3 py-2 text-sm text-zinc-300 transition-colors hover:bg-white/5 hover:text-white"

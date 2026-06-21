@@ -9,9 +9,12 @@ export async function signup(formData: FormData) {
   const email = formData.get("email") as string;
   const password = formData.get("password") as string;
   const confirmPassword = formData.get("confirmPassword") as string;
+  const redirectTo = (formData.get("redirectTo") as string) || "/";
 
   if (password !== confirmPassword) {
-    redirect(`/signup?error=${encodeURIComponent("Passwords do not match")}`);
+    redirect(
+      `/signup?error=${encodeURIComponent("Passwords do not match")}&redirectTo=${encodeURIComponent(redirectTo)}`,
+    );
   }
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
@@ -25,8 +28,12 @@ export async function signup(formData: FormData) {
   });
 
   if (error) {
-    redirect(`/signup?error=${encodeURIComponent(error.message)}`);
+    redirect(
+      `/signup?error=${encodeURIComponent(error.message)}&redirectTo=${encodeURIComponent(redirectTo)}`,
+    );
   }
 
-  redirect("/login?message=Check your email to confirm your account");
+  redirect(
+    `/login?message=${encodeURIComponent("Check your email to confirm your account")}&redirectTo=${encodeURIComponent(redirectTo)}`,
+  );
 }

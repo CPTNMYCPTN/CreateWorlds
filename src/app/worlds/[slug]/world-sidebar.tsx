@@ -118,6 +118,7 @@ function FolderItem({
   worldSlug,
   isOwner,
   selectedThreadId,
+  selectedFolderId,
   newThreadIds,
   onSelectThread,
   onThreadCreated,
@@ -127,11 +128,18 @@ function FolderItem({
   worldSlug: string;
   isOwner: boolean;
   selectedThreadId: string | null;
+  selectedFolderId: string | null;
   newThreadIds: Set<string>;
   onSelectThread: (thread: WorldThread) => void;
   onThreadCreated: (folderId: string, thread: WorldThread) => void;
 }) {
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (selectedFolderId === folder.id) {
+      setOpen(true);
+    }
+  }, [folder.id, selectedFolderId]);
 
   return (
     <div>
@@ -292,6 +300,7 @@ export function WorldSidebar({
   folders: initialFolders,
   isOwner,
   selectedThreadId,
+  selectedFolderId,
   onSelectThread,
 }: {
   worldId: string;
@@ -299,6 +308,7 @@ export function WorldSidebar({
   folders: WorldFolder[];
   isOwner: boolean;
   selectedThreadId: string | null;
+  selectedFolderId: string | null;
   onSelectThread: (thread: WorldThread) => void;
 }) {
   const [folders, setFolders] = useState(initialFolders);
@@ -492,6 +502,7 @@ export function WorldSidebar({
               worldSlug={worldSlug}
               isOwner={isOwner}
               selectedThreadId={selectedThreadId}
+              selectedFolderId={selectedFolderId}
               newThreadIds={newThreadIds}
               onSelectThread={handleSelectThread}
               onThreadCreated={handleThreadCreated}

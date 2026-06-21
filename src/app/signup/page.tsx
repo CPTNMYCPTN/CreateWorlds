@@ -4,7 +4,7 @@ import { signup } from "./actions";
 export default async function SignupPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; redirectTo?: string }>;
 }) {
   const params = await searchParams;
 
@@ -25,6 +25,11 @@ export default async function SignupPage({
         )}
 
         <form className="mt-6 flex flex-col gap-4" action={signup}>
+          <input
+            type="hidden"
+            name="redirectTo"
+            value={params.redirectTo ?? "/"}
+          />
           <div className="flex flex-col gap-1.5">
             <label
               htmlFor="email"
