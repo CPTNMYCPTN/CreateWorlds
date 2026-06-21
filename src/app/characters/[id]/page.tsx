@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Navbar } from "@/components/navbar";
 import { createClient } from "@/utils/supabase/server";
+import { CharacterPageActions } from "./character-page-actions";
 import type { FieldType, TemplateField } from "../types";
 
 const FIELD_TYPE_ICONS: Record<FieldType, LucideIcon> = {
@@ -145,15 +146,21 @@ export default async function CharacterPage({
   const { id } = await params;
   const supabase = await createClient();
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   const { data: character } = await supabase
     .from("characters")
-    .select("id, name, avatar_url, field_values, template_id")
+    .select("id, name, avatar_url, field_values, template_id, owner_id")
     .eq("id", id)
     .single();
 
   if (!character) {
     notFound();
   }
+
+  const isOwner = user?.id === character.owner_id;
 
   const [{ data: template }, { data: worldRows }] = await Promise.all([
     character.template_id
@@ -181,42 +188,48 @@ export default async function CharacterPage({
       <Navbar />
 
       <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-8 px-6 py-12">
-        <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:items-end sm:text-left">
-          <div className="h-24 w-24 shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-zinc-800 shadow-lg sm:h-28 sm:w-28">
-            {character.avatar_url ? (
-              <Image
-                src={character.avatar_url}
-                alt=""
-                width={112}
-                height={112}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <UserCircle2 className="h-full w-full text-zinc-600" />
-            )}
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">{character.name}</h1>
-            <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5 sm:justify-start">
-              {worlds.length === 0 ? (
-                <span className="inline-flex items-center gap-1.5 text-sm text-zinc-500">
-                  <Globe2 className="h-3.5 w-3.5" />
-                  Not in any worlds yet
-                </span>
+        <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:items-end sm:justify-between sm:text-left">
+          <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-end">
+            <div className="h-24 w-24 shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-zinc-800 shadow-lg sm:h-28 sm:w-28">
+              {character.avatar_url ? (
+                <Image
+                  src={character.avatar_url}
+                  alt=""
+                  width={112}
+                  height={112}
+                  className="h-full w-full object-cover"
+                />
               ) : (
-                worlds.map((world) => (
-                  <Link
-                    key={world.id}
-                    href={`/worlds/${world.slug}`}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-zinc-300 transition-colors hover:border-white/20 hover:text-white"
-                  >
-                    <Globe2 className="h-3 w-3" />
-                    {world.name}
-                  </Link>
-                ))
+                <UserCircle2 className="h-full w-full text-zinc-600" />
               )}
             </div>
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight">{character.name}</h1>
+              <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5 sm:justify-start">
+                {worlds.length === 0 ? (
+                  <span className="inline-flex items-center gap-1.5 text-sm text-zinc-500">
+                    <Globe2 className="h-3.5 w-3.5" />
+                    Not in any worlds yet
+                  </span>
+                ) : (
+                  worlds.map((world) => (
+                    <Link
+                      key={world.id}
+                      href={`/worlds/${world.slug}`}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-zinc-300 transition-colors hover:border-white/20 hover:text-white"
+                    >
+                      <Globe2 className="h-3 w-3" />
+                      {world.name}
+                    </Link>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
+
+          {isOwner && (
+            <CharacterPageActions characterId={character.id} characterName={character.name} />
+          )}
         </div>
 
         {fields.length > 0 && (

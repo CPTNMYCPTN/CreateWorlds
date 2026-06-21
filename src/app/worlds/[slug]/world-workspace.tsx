@@ -9,7 +9,14 @@ import { WorldSidebar } from "./world-sidebar";
 import { ThreadView } from "./thread-view";
 import { WorldMap } from "./world-map";
 import { WorldCharactersTab } from "./world-characters-tab";
-import type { MapHotspot, WorldCharacter, WorldFolder, WorldThread } from "./types";
+import { WorldMembersTab } from "./world-members-tab";
+import type {
+  MapHotspot,
+  WorldCharacter,
+  WorldFolder,
+  WorldMember,
+  WorldThread,
+} from "./types";
 
 type PresenceUser = {
   user_id: string;
@@ -67,30 +74,50 @@ export function WorldWorkspace({
   worldSlug,
   folders,
   isOwner,
+  isAdmin,
   isMember,
   description,
   mapUrl,
   hotspots,
   threadSnippets,
   characters,
+  members,
   currentUser,
 }: {
   worldId: string;
   worldSlug: string;
   folders: WorldFolder[];
   isOwner: boolean;
+  isAdmin: boolean;
   isMember: boolean;
   description: string;
   mapUrl: string | null;
   hotspots: MapHotspot[];
   threadSnippets: Record<string, string>;
   characters: WorldCharacter[];
+  members: WorldMember[];
   currentUser: { id: string; username: string; avatarUrl: string | null } | null;
 }) {
+  const canManageMembers = isOwner || isAdmin;
   const [selectedThread, setSelectedThread] = useState<WorldThread | null>(null);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([]);
   const [guestId] = useState(() => crypto.randomUUID());
+
+  function handleFolderDeleted(folderId: string) {
+    setSelectedThread((current) => (current?.folder_id === folderId ? null : current));
+    setSelectedFolderId((current) => (current === folderId ? null : current));
+  }
+
+  function handleThreadDeleted(threadId: string) {
+    setSelectedThread((current) => (current?.id === threadId ? null : current));
+  }
+
+  function handleThreadRenamed(threadId: string, title: string) {
+    setSelectedThread((current) =>
+      current?.id === threadId ? { ...current, title } : current,
+    );
+  }
 
   useEffect(() => {
     const supabase = createClient();
@@ -136,12 +163,16 @@ export function WorldWorkspace({
           worldSlug={worldSlug}
           folders={folders}
           isOwner={isOwner}
+          currentUserId={currentUser?.id ?? null}
           selectedThreadId={selectedThread?.id ?? null}
           selectedFolderId={selectedFolderId}
           onSelectThread={(thread) => {
             setSelectedThread(thread);
             setSelectedFolderId(null);
           }}
+          onFolderDeleted={handleFolderDeleted}
+          onThreadDeleted={handleThreadDeleted}
+          onThreadRenamed={handleThreadRenamed}
         />
 
         <main className="flex-1 rounded-2xl border border-white/10 bg-white/[0.02] p-6">
@@ -150,7 +181,11 @@ export function WorldWorkspace({
               thread={selectedThread}
               worldId={worldId}
               worldSlug={worldSlug}
+              isOwner={isOwner}
+              currentUserId={currentUser?.id ?? null}
               onBack={() => setSelectedThread(null)}
+              onRenamed={(title) => handleThreadRenamed(selectedThread.id, title)}
+              onDeleted={() => handleThreadDeleted(selectedThread.id)}
             />
           ) : (
             <Tabs.Root defaultValue="about">
@@ -173,6 +208,14 @@ export function WorldWorkspace({
                 >
                   Characters
                 </Tabs.Trigger>
+                {canManageMembers && (
+                  <Tabs.Trigger
+                    value="members"
+                    className="rounded-t-lg px-3 py-2 text-sm font-medium text-zinc-400 transition-colors hover:text-white data-[state=active]:text-white data-[state=active]:border-b-2 data-[state=active]:border-[var(--world-accent)]"
+                  >
+                    Members
+                  </Tabs.Trigger>
+                )}
               </Tabs.List>
 
               <Tabs.Content value="about" className="mt-4">
@@ -221,8 +264,22 @@ export function WorldWorkspace({
                   worldSlug={worldSlug}
                   characters={characters}
                   canAddCharacter={isOwner || isMember}
+                  currentUserId={currentUser?.id ?? null}
                 />
               </Tabs.Content>
+
+              {canManageMembers && (
+                <Tabs.Content value="members" className="mt-4">
+                  <WorldMembersTab
+                    worldId={worldId}
+                    worldSlug={worldSlug}
+                    members={members}
+                    isOwner={isOwner}
+                    isAdmin={isAdmin}
+                    currentUserId={currentUser?.id ?? null}
+                  />
+                </Tabs.Content>
+              )}
             </Tabs.Root>
           )}
         </main>

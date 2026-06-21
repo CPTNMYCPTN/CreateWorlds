@@ -5,6 +5,37 @@ import { ArrowLeft, Globe, Lock } from "lucide-react";
 import { createClient } from "@/utils/supabase/server";
 import { joinWorldFromInvite } from "./actions";
 
+type InviteWorldPreview = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  is_public: boolean;
+  banner_url: string | null;
+  icon_url: string | null;
+};
+
+function logSupabaseError(label: string, code: string, error: unknown) {
+  if (!error) {
+    return;
+  }
+
+  const err = error as {
+    message?: string;
+    code?: string;
+    details?: string;
+    hint?: string;
+  };
+
+  console.error(`[invite/${code}] ${label}`, {
+    message: err.message,
+    code: err.code,
+    details: err.details,
+    hint: err.hint,
+    raw: JSON.stringify(error),
+  });
+}
+
 export default async function InvitePage({
   params,
   searchParams,
@@ -21,15 +52,16 @@ export default async function InvitePage({
   } = await supabase.auth.getUser();
 
   const now = new Date().toISOString();
-  const { data: invite, error } = await supabase
+
+  const { data: invite, error: inviteError } = await supabase
     .from("world_invites")
-    .select(
-      "id, code, expires_at, max_uses, uses, world:worlds(id, name, slug, description, is_public, banner_url, icon_url)",
-    )
+    .select("id, code, expires_at, max_uses, uses, world_id")
     .eq("code", code)
     .single();
 
-  if (error || !invite) {
+  logSupabaseError("world_invites lookup failed", code, inviteError);
+
+  if (inviteError || !invite) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-6 py-16 text-zinc-50">
         <div className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-900 p-8 text-center">
@@ -48,26 +80,62 @@ export default async function InvitePage({
     );
   }
 
-  const world = (invite.world as unknown as {
-    id: string;
-    name: string;
-    slug: string;
-    description: string | null;
-    is_public: boolean;
-    banner_url: string | null;
-    icon_url: string | null;
-  }) || {
-    id: "",
-    name: "",
-    slug: "",
-    description: null,
-    is_public: false,
-    banner_url: null,
-    icon_url: null,
-  };
-
-  const isExpired = invite.expires_at && invite.expires_at <= now;
+  const isExpired = !!invite.expires_at && invite.expires_at <= now;
   const isMaxedOut = invite.max_uses !== null && invite.uses >= invite.max_uses;
+
+  // Bypasses the normal worlds RLS (which hides private worlds from
+  // non-members) so the preview can render before the viewer has joined.
+  const { data: worldRows, error: worldError } = await supabase.rpc(
+    "get_invite_world",
+    { invite_code: code },
+  );
+
+  logSupabaseError("get_invite_world rpc failed", code, worldError);
+
+  const world = (worldRows?.[0] as InviteWorldPreview | undefined) ?? null;
+
+  if (!world) {
+    if (isExpired || isMaxedOut) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-6 py-16 text-zinc-50">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-900 p-8 text-center">
+            <h1 className="text-2xl font-semibold">Invite unavailable</h1>
+            <p className="mt-2 text-sm text-zinc-400">
+              This invite link has expired or reached its usage limit.
+            </p>
+            <Link
+              href="/"
+              className="mt-6 inline-flex items-center justify-center rounded-full bg-violet-500 px-5 py-2.5 text-sm font-semibold text-white"
+            >
+              Go home
+            </Link>
+          </div>
+        </div>
+      );
+    }
+
+    console.error(
+      `[invite/${code}] get_invite_world returned no rows for an unexpired, non-maxed-out invite`,
+      JSON.stringify({ invite }),
+    );
+
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-6 py-16 text-zinc-50">
+        <div className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-900 p-8 text-center">
+          <h1 className="text-2xl font-semibold">Invalid invite</h1>
+          <p className="mt-2 text-sm text-zinc-400">
+            This invite link is invalid or has expired.
+          </p>
+          <Link
+            href="/"
+            className="mt-6 inline-flex items-center justify-center rounded-full bg-violet-500 px-5 py-2.5 text-sm font-semibold text-white"
+          >
+            Go home
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   if (isExpired || isMaxedOut) {
     return (
@@ -88,16 +156,18 @@ export default async function InvitePage({
     );
   }
 
-  const isMember = user
+  const { data: membership, error: membershipError } = user
     ? await supabase
         .from("world_members")
         .select("user_id")
         .eq("world_id", world.id)
         .eq("user_id", user.id)
         .maybeSingle()
-    : { data: null };
+    : { data: null, error: null };
 
-  if (isMember.data) {
+  logSupabaseError("membership lookup failed", code, membershipError);
+
+  if (membership) {
     redirect(`/worlds/${world.slug}`);
   }
 

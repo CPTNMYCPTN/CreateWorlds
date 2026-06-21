@@ -5,7 +5,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Plus, UserCircle2, X } from "lucide-react";
+import { Pencil, Plus, Trash2, UserCircle2, X } from "lucide-react";
+import { ActionMenu } from "@/components/action-menu";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { deleteCharacter } from "../../characters/create/actions";
 import { getMyCharacters, importCharacter } from "./actions";
 import type { OwnedCharacter, WorldCharacter } from "./types";
 
@@ -138,16 +141,112 @@ function AddCharacterDialog({
   );
 }
 
+function CharacterCard({
+  worldCharacter,
+  currentUserId,
+}: {
+  worldCharacter: WorldCharacter;
+  currentUserId: string | null;
+}) {
+  const router = useRouter();
+  const character = worldCharacter.character;
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [deleted, setDeleted] = useState(false);
+
+  if (!character || deleted) {
+    return null;
+  }
+
+  const isCharacterOwner = currentUserId === character.owner_id;
+  const characterId = character.id;
+
+  async function handleDelete() {
+    setPending(true);
+    setError(null);
+
+    const result = await deleteCharacter(characterId);
+
+    setPending(false);
+
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+
+    setDialogOpen(false);
+    setDeleted(true);
+  }
+
+  return (
+    <div className="relative flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.02] p-5 text-center transition-colors hover:border-white/20 hover:bg-white/5">
+      {isCharacterOwner && (
+        <div className="absolute right-2 top-2">
+          <ActionMenu
+            items={[
+              {
+                key: "edit",
+                label: "Edit",
+                icon: Pencil,
+                onSelect: () => router.push(`/characters/${character.id}/edit`),
+              },
+              {
+                key: "delete",
+                label: "Delete",
+                icon: Trash2,
+                danger: true,
+                onSelect: () => setDialogOpen(true),
+              },
+            ]}
+          />
+        </div>
+      )}
+
+      <Link href={`/characters/${character.id}`} className="flex flex-col items-center gap-3">
+        <div className="h-16 w-16 overflow-hidden rounded-full border border-white/10 bg-zinc-800">
+          {character.avatar_url ? (
+            <Image
+              src={character.avatar_url}
+              alt=""
+              width={64}
+              height={64}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <UserCircle2 className="h-full w-full text-zinc-600" />
+          )}
+        </div>
+        <span className="truncate text-sm font-medium text-zinc-200">
+          {character.name}
+        </span>
+      </Link>
+
+      <ConfirmDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        title="Delete this character?"
+        description={`This permanently deletes "${character.name}" and removes it from any worlds it's been added to. This can't be undone.`}
+        pending={pending}
+        error={error}
+        onConfirm={handleDelete}
+      />
+    </div>
+  );
+}
+
 export function WorldCharactersTab({
   worldId,
   worldSlug,
   characters: initialCharacters,
   canAddCharacter,
+  currentUserId,
 }: {
   worldId: string;
   worldSlug: string;
   characters: WorldCharacter[];
   canAddCharacter: boolean;
+  currentUserId: string | null;
 }) {
   const [characters, setCharacters] = useState(initialCharacters);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -180,32 +279,9 @@ export function WorldCharactersTab({
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {characters.map((wc) =>
-            wc.character ? (
-              <Link
-                key={wc.id}
-                href={`/characters/${wc.character.id}`}
-                className="flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.02] p-5 text-center transition-colors hover:border-white/20 hover:bg-white/5"
-              >
-                <div className="h-16 w-16 overflow-hidden rounded-full border border-white/10 bg-zinc-800">
-                  {wc.character.avatar_url ? (
-                    <Image
-                      src={wc.character.avatar_url}
-                      alt=""
-                      width={64}
-                      height={64}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <UserCircle2 className="h-full w-full text-zinc-600" />
-                  )}
-                </div>
-                <span className="truncate text-sm font-medium text-zinc-200">
-                  {wc.character.name}
-                </span>
-              </Link>
-            ) : null,
-          )}
+          {characters.map((wc) => (
+            <CharacterCard key={wc.id} worldCharacter={wc} currentUserId={currentUserId} />
+          ))}
         </div>
       )}
 

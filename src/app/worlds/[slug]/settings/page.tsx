@@ -5,6 +5,7 @@ import { Navbar } from "@/components/navbar";
 import { createClient } from "@/utils/supabase/server";
 import { WorldThemeForm } from "../world-theme-form";
 import { WorldVisibilityForm } from "../world-visibility-form";
+import { WorldDangerZone } from "../world-danger-zone";
 import { DEFAULT_WORLD_THEME, type WorldSettings } from "../types";
 
 export default async function WorldSettingsPage({
@@ -81,6 +82,8 @@ export default async function WorldSettingsPage({
 
           <WorldThemeForm worldId={world.id} worldSlug={world.slug} theme={theme} />
         </section>
+
+        <WorldDangerZone worldId={world.id} worldSlug={world.slug} worldName={world.name} />
       </main>
     </div>
   );

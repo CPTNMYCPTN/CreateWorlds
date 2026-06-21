@@ -421,13 +421,17 @@ function Toolbar({ editor }: { editor: Editor }) {
 }
 
 export function PostEditor({
+  content,
   onChange,
   onEmptyChange,
   placeholder,
+  autoFocus,
 }: {
+  content?: string;
   onChange: (html: string) => void;
   onEmptyChange: (empty: boolean) => void;
   placeholder?: string;
+  autoFocus?: boolean;
 }) {
   const editor = useEditor({
     extensions: [
@@ -466,8 +470,9 @@ export function PostEditor({
         placeholder: placeholder ?? "Write something...",
       }),
     ],
-    content: "",
+    content: content ?? "",
     immediatelyRender: false,
+    autofocus: autoFocus ? "end" : false,
     onUpdate: ({ editor }) => {
       onChange(editor.isEmpty ? "" : editor.getHTML());
       onEmptyChange(editor.isEmpty);

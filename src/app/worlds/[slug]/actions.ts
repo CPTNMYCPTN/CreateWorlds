@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import type {
   HeaderStyle,
@@ -54,6 +55,7 @@ export type CreateThreadState = {
     title: string;
     is_pinned: boolean;
     is_locked: boolean;
+    author_id: string;
   };
 };
 
@@ -88,7 +90,7 @@ export async function createThread(
       author_id: user.id,
       title,
     })
-    .select("id, folder_id, title, is_pinned, is_locked")
+    .select("id, folder_id, title, is_pinned, is_locked, author_id")
     .single();
 
   if (error) {
@@ -436,6 +438,57 @@ export async function updateHotspot(
   return { error: null };
 }
 
+export type DeleteHotspotState = {
+  error: string | null;
+};
+
+export async function deleteHotspot(
+  hotspotId: string,
+  worldSlug: string,
+): Promise<DeleteHotspotState> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "You must be signed in to delete a hotspot." };
+  }
+
+  const { data: hotspotRow, error: hotspotLookupError } = await supabase
+    .from("world_map_hotspots")
+    .select("world_id")
+    .eq("id", hotspotId)
+    .single();
+
+  if (hotspotLookupError || !hotspotRow) {
+    return { error: hotspotLookupError?.message ?? "Hotspot not found." };
+  }
+
+  const { data: worldRow, error: worldLookupError } = await supabase
+    .from("worlds")
+    .select("owner_id")
+    .eq("id", hotspotRow.world_id)
+    .single();
+
+  if (worldLookupError || !worldRow || worldRow.owner_id !== user.id) {
+    return { error: "Only the world owner can delete this hotspot." };
+  }
+
+  const { error: deleteError } = await supabase
+    .from("world_map_hotspots")
+    .delete()
+    .eq("id", hotspotId);
+
+  if (deleteError) {
+    return { error: deleteError.message };
+  }
+
+  revalidatePath(`/worlds/${worldSlug}`);
+  return { error: null };
+}
+
 export async function getMyCharacters(): Promise<OwnedCharacter[]> {
   const supabase = await createClient();
 
@@ -527,7 +580,9 @@ export async function importCharacter(
   const { data, error } = await supabase
     .from("world_characters")
     .insert({ world_id: worldId, character_id: characterId })
-    .select("id, character:characters(id, name, avatar_url)")
+    .select(
+      "id, character:characters!world_characters_character_id_fkey(id, name, avatar_url, owner_id)",
+    )
     .single();
 
   if (error) {
@@ -831,4 +886,534 @@ export async function updateWorldTheme(
   revalidatePath(`/worlds/${worldSlug}`);
   revalidatePath(`/worlds/${worldSlug}/settings`);
   return { error: null, theme };
+}
+
+export type DeleteWorldState = {
+  error: string | null;
+};
+
+export async function deleteWorld(
+  worldId: string,
+  worldSlug: string,
+  confirmName: string,
+): Promise<DeleteWorldState> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "You must be signed in to delete a world." };
+  }
+
+  const { data: world, error: fetchError } = await supabase
+    .from("worlds")
+    .select("name, owner_id")
+    .eq("id", worldId)
+    .single();
+
+  if (fetchError || !world) {
+    return { error: fetchError?.message ?? "World not found." };
+  }
+
+  if (world.owner_id !== user.id) {
+    return { error: "Only the world owner can delete this world." };
+  }
+
+  if (confirmName !== world.name) {
+    return { error: "The name you typed doesn't match this world's name." };
+  }
+
+  const { error: deleteError } = await supabase
+    .from("worlds")
+    .delete()
+    .eq("id", worldId);
+
+  if (deleteError) {
+    return { error: deleteError.message };
+  }
+
+  revalidatePath("/");
+  revalidatePath(`/worlds/${worldSlug}`);
+  redirect("/");
+}
+
+export type RenameFolderState = {
+  error: string | null;
+};
+
+export async function renameFolder(
+  folderId: string,
+  worldSlug: string,
+  name: string,
+): Promise<RenameFolderState> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "You must be signed in to rename a folder." };
+  }
+
+  const trimmedName = name.trim();
+
+  if (!trimmedName) {
+    return { error: "Folder name is required." };
+  }
+
+  const { data: folderRow, error: folderLookupError } = await supabase
+    .from("world_folders")
+    .select("world_id")
+    .eq("id", folderId)
+    .single();
+
+  if (folderLookupError || !folderRow) {
+    return { error: folderLookupError?.message ?? "Folder not found." };
+  }
+
+  const { data: worldRow, error: worldLookupError } = await supabase
+    .from("worlds")
+    .select("owner_id")
+    .eq("id", folderRow.world_id)
+    .single();
+
+  if (worldLookupError || !worldRow || worldRow.owner_id !== user.id) {
+    return { error: "Only the world owner can rename this folder." };
+  }
+
+  const { error: updateError } = await supabase
+    .from("world_folders")
+    .update({ name: trimmedName })
+    .eq("id", folderId);
+
+  if (updateError) {
+    return { error: updateError.message };
+  }
+
+  revalidatePath(`/worlds/${worldSlug}`);
+  return { error: null };
+}
+
+export type DeleteFolderState = {
+  error: string | null;
+};
+
+export async function deleteFolder(
+  folderId: string,
+  worldSlug: string,
+): Promise<DeleteFolderState> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "You must be signed in to delete a folder." };
+  }
+
+  const { data: folderRow, error: folderLookupError } = await supabase
+    .from("world_folders")
+    .select("world_id")
+    .eq("id", folderId)
+    .single();
+
+  if (folderLookupError || !folderRow) {
+    return { error: folderLookupError?.message ?? "Folder not found." };
+  }
+
+  const { data: worldRow, error: worldLookupError } = await supabase
+    .from("worlds")
+    .select("owner_id")
+    .eq("id", folderRow.world_id)
+    .single();
+
+  if (worldLookupError || !worldRow || worldRow.owner_id !== user.id) {
+    return { error: "Only the world owner can delete this folder." };
+  }
+
+  const { error: deleteError } = await supabase
+    .from("world_folders")
+    .delete()
+    .eq("id", folderId);
+
+  if (deleteError) {
+    return { error: deleteError.message };
+  }
+
+  revalidatePath(`/worlds/${worldSlug}`);
+  return { error: null };
+}
+
+export type RenameThreadState = {
+  error: string | null;
+};
+
+async function canManageThread(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  threadId: string,
+  userId: string,
+): Promise<{ ok: boolean; worldId?: string; error?: string }> {
+  const { data: threadRow, error: threadLookupError } = await supabase
+    .from("world_threads")
+    .select("world_id, author_id")
+    .eq("id", threadId)
+    .single();
+
+  if (threadLookupError || !threadRow) {
+    return { ok: false, error: threadLookupError?.message ?? "Thread not found." };
+  }
+
+  if (threadRow.author_id === userId) {
+    return { ok: true, worldId: threadRow.world_id };
+  }
+
+  const { data: worldRow, error: worldLookupError } = await supabase
+    .from("worlds")
+    .select("owner_id")
+    .eq("id", threadRow.world_id)
+    .single();
+
+  if (worldLookupError || !worldRow) {
+    return { ok: false, error: worldLookupError?.message ?? "World not found." };
+  }
+
+  if (worldRow.owner_id !== userId) {
+    return { ok: false, error: "Only the thread author or world owner can do this." };
+  }
+
+  return { ok: true, worldId: threadRow.world_id };
+}
+
+export async function renameThread(
+  threadId: string,
+  worldSlug: string,
+  title: string,
+): Promise<RenameThreadState> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "You must be signed in to rename a thread." };
+  }
+
+  const trimmedTitle = title.trim();
+
+  if (!trimmedTitle) {
+    return { error: "Thread title is required." };
+  }
+
+  const permission = await canManageThread(supabase, threadId, user.id);
+
+  if (!permission.ok) {
+    return { error: permission.error ?? "Could not rename this thread." };
+  }
+
+  const { error: updateError } = await supabase
+    .from("world_threads")
+    .update({ title: trimmedTitle })
+    .eq("id", threadId);
+
+  if (updateError) {
+    return { error: updateError.message };
+  }
+
+  revalidatePath(`/worlds/${worldSlug}`);
+  return { error: null };
+}
+
+export type DeleteThreadState = {
+  error: string | null;
+};
+
+export async function deleteThread(
+  threadId: string,
+  worldSlug: string,
+): Promise<DeleteThreadState> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "You must be signed in to delete a thread." };
+  }
+
+  const permission = await canManageThread(supabase, threadId, user.id);
+
+  if (!permission.ok) {
+    return { error: permission.error ?? "Could not delete this thread." };
+  }
+
+  const { error: deleteError } = await supabase
+    .from("world_threads")
+    .delete()
+    .eq("id", threadId);
+
+  if (deleteError) {
+    return { error: deleteError.message };
+  }
+
+  revalidatePath(`/worlds/${worldSlug}`);
+  return { error: null };
+}
+
+export type UpdatePostState = {
+  error: string | null;
+};
+
+async function canManagePost(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  postId: string,
+  userId: string,
+): Promise<{ ok: boolean; worldId?: string; error?: string }> {
+  const { data: postRow, error: postLookupError } = await supabase
+    .from("world_posts")
+    .select("world_id, author_id")
+    .eq("id", postId)
+    .single();
+
+  if (postLookupError || !postRow) {
+    return { ok: false, error: postLookupError?.message ?? "Post not found." };
+  }
+
+  if (postRow.author_id === userId) {
+    return { ok: true, worldId: postRow.world_id };
+  }
+
+  const { data: worldRow, error: worldLookupError } = await supabase
+    .from("worlds")
+    .select("owner_id")
+    .eq("id", postRow.world_id)
+    .single();
+
+  if (worldLookupError || !worldRow) {
+    return { ok: false, error: worldLookupError?.message ?? "World not found." };
+  }
+
+  if (worldRow.owner_id !== userId) {
+    return { ok: false, error: "Only the post author or world owner can do this." };
+  }
+
+  return { ok: true, worldId: postRow.world_id };
+}
+
+export async function updatePost(
+  postId: string,
+  worldSlug: string,
+  content: string,
+): Promise<UpdatePostState> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "You must be signed in to edit a post." };
+  }
+
+  const trimmedContent = content.trim();
+
+  if (!trimmedContent) {
+    return { error: "Post content is required." };
+  }
+
+  const permission = await canManagePost(supabase, postId, user.id);
+
+  if (!permission.ok) {
+    return { error: permission.error ?? "Could not edit this post." };
+  }
+
+  const { error: updateError } = await supabase
+    .from("world_posts")
+    .update({ content: trimmedContent })
+    .eq("id", postId);
+
+  if (updateError) {
+    return { error: updateError.message };
+  }
+
+  revalidatePath(`/worlds/${worldSlug}`);
+  return { error: null };
+}
+
+export type DeletePostState = {
+  error: string | null;
+};
+
+export async function deletePost(
+  postId: string,
+  worldSlug: string,
+): Promise<DeletePostState> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "You must be signed in to delete a post." };
+  }
+
+  const permission = await canManagePost(supabase, postId, user.id);
+
+  if (!permission.ok) {
+    return { error: permission.error ?? "Could not delete this post." };
+  }
+
+  const { error: deleteError } = await supabase
+    .from("world_posts")
+    .delete()
+    .eq("id", postId);
+
+  if (deleteError) {
+    return { error: deleteError.message };
+  }
+
+  revalidatePath(`/worlds/${worldSlug}`);
+  return { error: null };
+}
+
+export type UpdateMemberRoleState = {
+  error: string | null;
+};
+
+export async function updateMemberRole(
+  worldId: string,
+  worldSlug: string,
+  memberId: string,
+  newRole: "admin" | "member",
+): Promise<UpdateMemberRoleState> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "You must be signed in to manage members." };
+  }
+
+  const { data: worldRow, error: worldLookupError } = await supabase
+    .from("worlds")
+    .select("owner_id")
+    .eq("id", worldId)
+    .single();
+
+  if (worldLookupError || !worldRow) {
+    return { error: "World not found." };
+  }
+
+  if (worldRow.owner_id !== user.id) {
+    return { error: "Only the world owner can change member roles." };
+  }
+
+  const { data: memberRow, error: memberLookupError } = await supabase
+    .from("world_members")
+    .select("role")
+    .eq("id", memberId)
+    .eq("world_id", worldId)
+    .single();
+
+  if (memberLookupError || !memberRow) {
+    return { error: "Member not found." };
+  }
+
+  if (memberRow.role === "owner") {
+    return { error: "The world owner's role can't be changed." };
+  }
+
+  const { error: updateError } = await supabase
+    .from("world_members")
+    .update({ role: newRole })
+    .eq("id", memberId);
+
+  if (updateError) {
+    return { error: updateError.message };
+  }
+
+  revalidatePath(`/worlds/${worldSlug}`);
+  return { error: null };
+}
+
+export type RemoveMemberState = {
+  error: string | null;
+};
+
+export async function removeMember(
+  worldId: string,
+  worldSlug: string,
+  memberId: string,
+): Promise<RemoveMemberState> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "You must be signed in to manage members." };
+  }
+
+  const { data: memberRow, error: memberLookupError } = await supabase
+    .from("world_members")
+    .select("role")
+    .eq("id", memberId)
+    .eq("world_id", worldId)
+    .single();
+
+  if (memberLookupError || !memberRow) {
+    return { error: "Member not found." };
+  }
+
+  if (memberRow.role === "owner") {
+    return { error: "The world owner can't be removed." };
+  }
+
+  const { data: worldRow, error: worldLookupError } = await supabase
+    .from("worlds")
+    .select("owner_id")
+    .eq("id", worldId)
+    .single();
+
+  if (worldLookupError || !worldRow) {
+    return { error: "World not found." };
+  }
+
+  const isOwner = worldRow.owner_id === user.id;
+
+  if (!isOwner) {
+    const { data: actingMember } = await supabase
+      .from("world_members")
+      .select("role")
+      .eq("world_id", worldId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    const isAdmin = actingMember?.role === "admin";
+
+    if (!isAdmin || memberRow.role !== "member") {
+      return { error: "You don't have permission to remove this member." };
+    }
+  }
+
+  const { error: deleteError } = await supabase
+    .from("world_members")
+    .delete()
+    .eq("id", memberId);
+
+  if (deleteError) {
+    return { error: deleteError.message };
+  }
+
+  revalidatePath(`/worlds/${worldSlug}`);
+  return { error: null };
 }

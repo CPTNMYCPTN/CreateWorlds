@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Navbar } from "@/components/navbar";
 import { createClient } from "@/utils/supabase/server";
+import { MyCharactersGrid } from "./my-characters-grid";
 
 type WorldCard = {
   id: string;
@@ -312,72 +313,32 @@ export default async function Home() {
             </div>
           </div>
 
-          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {!characters || characters.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-16 text-center sm:col-span-2 lg:col-span-4">
-                <UserCircle2 className="h-10 w-10 text-zinc-600" />
-                <h3 className="text-lg font-medium text-zinc-200">
-                  No characters yet
-                </h3>
-                <p className="max-w-sm text-sm text-zinc-500">
-                  Create a character template to define reusable fields, then
-                  bring your first character to life.
-                </p>
-                <Link
-                  href="/characters/create"
-                  className="mt-2 inline-flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-zinc-200 transition-colors hover:border-white/20 hover:bg-white/5"
-                >
-                  <Plus className="h-4 w-4" />
-                  Create a Character
-                </Link>
-              </div>
-            ) : (
-              characters.map((character) => {
-                const importedWorlds = characterWorlds.get(character.id) ?? [];
-
-                return (
-                  <div
-                    key={character.id}
-                    className="flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.02] p-5 text-center"
-                  >
-                    <div className="h-16 w-16 overflow-hidden rounded-full border border-white/10 bg-zinc-800">
-                      {character.avatar_url ? (
-                        <Image
-                          src={character.avatar_url}
-                          alt=""
-                          width={64}
-                          height={64}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <UserCircle2 className="h-full w-full text-zinc-600" />
-                      )}
-                    </div>
-                    <span className="truncate text-sm font-medium text-zinc-200">
-                      {character.name}
-                    </span>
-                    {importedWorlds.length === 0 ? (
-                      <span className="text-xs text-zinc-500">
-                        Not in any worlds yet
-                      </span>
-                    ) : (
-                      <div className="flex flex-wrap items-center justify-center gap-1.5">
-                        {importedWorlds.map((world) => (
-                          <Link
-                            key={world.id}
-                            href={`/worlds/${world.slug}`}
-                            className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-zinc-300 transition-colors hover:border-white/20 hover:text-white"
-                          >
-                            {world.name}
-                          </Link>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </div>
+          {!characters || characters.length === 0 ? (
+            <div className="mt-6 flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-16 text-center">
+              <UserCircle2 className="h-10 w-10 text-zinc-600" />
+              <h3 className="text-lg font-medium text-zinc-200">
+                No characters yet
+              </h3>
+              <p className="max-w-sm text-sm text-zinc-500">
+                Create a character template to define reusable fields, then
+                bring your first character to life.
+              </p>
+              <Link
+                href="/characters/create"
+                className="mt-2 inline-flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm font-medium text-zinc-200 transition-colors hover:border-white/20 hover:bg-white/5"
+              >
+                <Plus className="h-4 w-4" />
+                Create a Character
+              </Link>
+            </div>
+          ) : (
+            <MyCharactersGrid
+              characters={characters.map((character) => ({
+                ...character,
+                importedWorlds: characterWorlds.get(character.id) ?? [],
+              }))}
+            />
+          )}
         </section>
       </main>
     </div>

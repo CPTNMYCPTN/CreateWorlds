@@ -31,9 +31,23 @@ export type OwnedCharacter = {
   avatar_url: string | null;
 };
 
+export type WorldCharacterEntry = OwnedCharacter & { owner_id: string };
+
 export type WorldCharacter = {
   id: string;
-  character: OwnedCharacter | null;
+  character: WorldCharacterEntry | null;
+};
+
+export type WorldMemberRole = "owner" | "admin" | "member";
+
+export type WorldMember = {
+  id: string;
+  user_id: string;
+  role: WorldMemberRole;
+  created_at: string;
+  username: string;
+  display_name: string | null;
+  avatar_url: string | null;
 };
 
 export type HeaderStyle = "solid" | "gradient" | "transparent";

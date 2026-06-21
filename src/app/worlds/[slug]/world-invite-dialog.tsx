@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Copy, Plus, Trash2, X } from "lucide-react";
 import { createWorldInvite, deleteWorldInvite, type WorldInvite } from "./actions";
@@ -23,10 +23,12 @@ export function WorldInviteDialog({
   worldId,
   worldSlug,
   invites,
+  siteUrl,
 }: {
   worldId: string;
   worldSlug: string;
   invites: WorldInvite[];
+  siteUrl: string;
 }) {
   const [open, setOpen] = useState(false);
   const [expiryOption, setExpiryOption] = useState("never");
@@ -36,13 +38,7 @@ export function WorldInviteDialog({
   const [inviteList, setInviteList] = useState(invites);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
-  const inviteUrl = useMemo(() => {
-    if (typeof window === "undefined") {
-      return "";
-    }
-
-    return `${window.location.origin}/invite`;
-  }, []);
+  const inviteUrl = `${siteUrl}/invite`;
 
   async function handleCreate() {
     setPending(true);
@@ -198,7 +194,7 @@ export function WorldInviteDialog({
                     >
                       <div>
                         <p className="font-mono text-sm text-zinc-100">
-                          {`${window.location.origin}/invite/${invite.code}`}
+                          {`${inviteUrl}/${invite.code}`}
                         </p>
                         <p className="mt-1 text-xs text-zinc-500">
                           {isExpired

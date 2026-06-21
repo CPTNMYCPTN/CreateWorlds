@@ -7,15 +7,24 @@ import {
   Map as MapIcon,
   MapPin,
   MessageSquare,
-  MoreHorizontal,
+  Pencil,
   RotateCcw,
+  Trash2,
   Upload,
   X,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
-import { createHotspot, setWorldMap, updateHotspot, type CreateHotspotState } from "./actions";
+import { ActionMenu } from "@/components/action-menu";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import {
+  createHotspot,
+  deleteHotspot,
+  setWorldMap,
+  updateHotspot,
+  type CreateHotspotState,
+} from "./actions";
 import type { MapHotspot, MapHotspotLinkType, WorldFolder, WorldThread } from "./types";
 
 const initialHotspotState: CreateHotspotState = { error: null };
@@ -426,6 +435,7 @@ const HOTSPOT_CLOSE_DELAY_MS = 180;
 
 function HotspotPin({
   hotspot,
+  worldSlug,
   folders,
   threadSnippets,
   isOpen,
@@ -435,8 +445,10 @@ function HotspotPin({
   onSelectThread,
   onNavigateFolder,
   onEdit,
+  onDeleted,
 }: {
   hotspot: MapHotspot;
+  worldSlug: string;
   folders: WorldFolder[];
   threadSnippets: Record<string, string>;
   isOpen: boolean;
@@ -446,6 +458,7 @@ function HotspotPin({
   onSelectThread: (thread: WorldThread) => void;
   onNavigateFolder: (folderId: string) => void;
   onEdit: () => void;
+  onDeleted: () => void;
 }) {
   const folderMap = new Map(folders.map((folder) => [folder.id, folder]));
   const threadMap = new Map(
@@ -453,6 +466,25 @@ function HotspotPin({
   );
 
   const hasLinks = hotspot.links.length > 0;
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function handleDelete() {
+    setDeletePending(true);
+    setDeleteError(null);
+    const result = await deleteHotspot(hotspot.id, worldSlug);
+    setDeletePending(false);
+
+    if (result.error) {
+      setDeleteError(result.error);
+      return;
+    }
+
+    setDeleteDialogOpen(false);
+    onDeleted();
+  }
 
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -507,18 +539,23 @@ function HotspotPin({
           >
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-medium text-zinc-100">{hotspot.label}</p>
-              {onEdit && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEdit();
-                  }}
-                  className="rounded-md p-1 text-zinc-500 transition-colors hover:bg-white/5 hover:text-white"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </button>
-              )}
+              <ActionMenu
+                items={[
+                  {
+                    key: "edit",
+                    label: "Edit hotspot",
+                    icon: Pencil,
+                    onSelect: onEdit,
+                  },
+                  {
+                    key: "delete",
+                    label: "Delete hotspot",
+                    icon: Trash2,
+                    danger: true,
+                    onSelect: () => setDeleteDialogOpen(true),
+                  },
+                ]}
+              />
             </div>
 
             <div className="mt-2 flex max-h-64 flex-col gap-2 overflow-y-auto">
@@ -603,6 +640,16 @@ function HotspotPin({
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Delete hotspot?"
+        description={`This removes "${hotspot.label}" and all of its links from the map. This can't be undone.`}
+        pending={deletePending}
+        error={deleteError}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }
@@ -887,6 +934,7 @@ export function WorldMap({
             <HotspotPin
               key={hotspot.id}
               hotspot={hotspot}
+              worldSlug={worldSlug}
               folders={folders}
               threadSnippets={threadSnippets}
               isOpen={openHotspotId === hotspot.id}
@@ -900,6 +948,10 @@ export function WorldMap({
               onSelectThread={onSelectThread}
               onNavigateFolder={onNavigateFolder ?? (() => {})}
               onEdit={() => setEditHotspotId(hotspot.id)}
+              onDeleted={() => {
+                setHotspots((current) => current.filter((item) => item.id !== hotspot.id));
+                setOpenHotspotId((current) => (current === hotspot.id ? null : current));
+              }}
             />
           ))}
         </div>

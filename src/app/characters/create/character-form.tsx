@@ -13,7 +13,7 @@ import {
   Video,
   type LucideIcon,
 } from "lucide-react";
-import { createCharacter, type CreateCharacterState } from "./actions";
+import { createCharacter, updateCharacter, type CreateCharacterState } from "./actions";
 import type { CharacterTemplate, FieldType, TemplateField } from "../types";
 
 const initialState: CreateCharacterState = { error: null };
@@ -34,9 +34,17 @@ const FIELD_PLACEHOLDERS: Partial<Record<FieldType, string>> = {
   youtube: "https://youtube.com/watch?v=...",
 };
 
-function FieldInput({ field }: { field: TemplateField }) {
+function FieldInput({
+  field,
+  initialValue,
+}: {
+  field: TemplateField;
+  initialValue?: string | number;
+}) {
   const Icon = FIELD_TYPE_ICONS[field.type];
-  const [preview, setPreview] = useState<string | null>(null);
+  const [preview, setPreview] = useState<string | null>(
+    field.type === "image" ? ((initialValue as string) ?? null) : null,
+  );
   const name = `field:${field.id}`;
 
   return (
@@ -56,6 +64,7 @@ function FieldInput({ field }: { field: TemplateField }) {
           name={name}
           rows={4}
           required={field.required}
+          defaultValue={(initialValue as string) ?? ""}
           className="mt-2 w-full resize-none rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-50 outline-none placeholder:text-zinc-500 focus:border-violet-400/50"
         />
       ) : field.type === "image" ? (
@@ -72,7 +81,7 @@ function FieldInput({ field }: { field: TemplateField }) {
             name={name}
             type="file"
             accept="image/*"
-            required={field.required}
+            required={field.required && !initialValue}
             className="sr-only"
             onChange={(e) => {
               const file = e.target.files?.[0];
@@ -86,6 +95,7 @@ function FieldInput({ field }: { field: TemplateField }) {
           name={name}
           type={field.type === "number" ? "number" : field.type === "url" ? "url" : "text"}
           required={field.required}
+          defaultValue={initialValue ?? ""}
           placeholder={FIELD_PLACEHOLDERS[field.type]}
           className="mt-2 w-full rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-50 outline-none placeholder:text-zinc-500 focus:border-violet-400/50"
         />
@@ -97,18 +107,34 @@ function FieldInput({ field }: { field: TemplateField }) {
 export function CharacterForm({
   templates,
   worldId,
+  character,
 }: {
   templates: CharacterTemplate[];
   worldId: string | null;
+  character?: {
+    id: string;
+    name: string;
+    avatarUrl: string | null;
+    templateId: string | null;
+    fieldValues: Record<string, string | number>;
+  };
 }) {
-  const [state, formAction, pending] = useActionState(
-    createCharacter,
-    initialState,
+  const isEditing = Boolean(character);
+  const [action] = useState(() =>
+    character ? updateCharacter.bind(null, character.id) : createCharacter,
   );
+  const [state, formAction, pending] = useActionState(action, initialState);
   const [selectedTemplate, setSelectedTemplate] = useState<
     CharacterTemplate | null | undefined
-  >(templates.length === 0 ? null : undefined);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  >(() => {
+    if (character) {
+      return templates.find((t) => t.id === character.templateId) ?? null;
+    }
+    return templates.length === 0 ? null : undefined;
+  });
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(
+    character?.avatarUrl ?? null,
+  );
 
   if (selectedTemplate === undefined) {
     return (
@@ -162,7 +188,7 @@ export function CharacterForm({
         </p>
       )}
 
-      {templates.length > 0 && (
+      {!isEditing && templates.length > 0 && (
         <button
           type="button"
           onClick={() => setSelectedTemplate(undefined)}
@@ -207,6 +233,7 @@ export function CharacterForm({
             id="name"
             name="name"
             required
+            defaultValue={character?.name ?? ""}
             placeholder="Kaelen Vesh"
             className="mt-2 w-full rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-50 outline-none placeholder:text-zinc-500 focus:border-violet-400/50"
           />
@@ -221,7 +248,11 @@ export function CharacterForm({
       {fields.length > 0 && (
         <div className="flex flex-col gap-6">
           {fields.map((field) => (
-            <FieldInput key={field.id} field={field} />
+            <FieldInput
+              key={field.id}
+              field={field}
+              initialValue={character?.fieldValues[field.id]}
+            />
           ))}
         </div>
       )}
@@ -235,7 +266,13 @@ export function CharacterForm({
         disabled={pending}
         className="inline-flex items-center justify-center self-start rounded-full bg-violet-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-500/20 transition-colors hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {pending ? "Creating character..." : "Create Character"}
+        {isEditing
+          ? pending
+            ? "Saving..."
+            : "Save changes"
+          : pending
+            ? "Creating character..."
+            : "Create Character"}
       </button>
     </form>
   );

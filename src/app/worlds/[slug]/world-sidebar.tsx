@@ -9,12 +9,25 @@ import {
   FolderPlus,
   Lock,
   MessageSquare,
+  Pencil,
   Pin,
   Plus,
+  Trash2,
   X,
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
-import { createFolder, createThread, type CreateFolderState, type CreateThreadState } from "./actions";
+import { ActionMenu } from "@/components/action-menu";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import {
+  createFolder,
+  createThread,
+  deleteFolder,
+  deleteThread,
+  renameFolder,
+  renameThread,
+  type CreateFolderState,
+  type CreateThreadState,
+} from "./actions";
 import type { WorldFolder, WorldThread } from "./types";
 
 const initialFolderState: CreateFolderState = { error: null };
@@ -112,50 +125,310 @@ function AddThreadDialog({
   );
 }
 
+function ThreadRow({
+  thread,
+  isSelected,
+  isNew,
+  canManage,
+  worldSlug,
+  onSelect,
+  onRenamed,
+  onDeleted,
+}: {
+  thread: WorldThread;
+  isSelected: boolean;
+  isNew: boolean;
+  canManage: boolean;
+  worldSlug: string;
+  onSelect: () => void;
+  onRenamed: (title: string) => void;
+  onDeleted: () => void;
+}) {
+  const [renaming, setRenaming] = useState(false);
+  const [titleInput, setTitleInput] = useState(thread.title);
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [renamePending, setRenamePending] = useState(false);
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function commitRename() {
+    const trimmed = titleInput.trim();
+
+    if (!trimmed || trimmed === thread.title) {
+      setRenaming(false);
+      setTitleInput(thread.title);
+      return;
+    }
+
+    setRenamePending(true);
+    setRenameError(null);
+    const result = await renameThread(thread.id, worldSlug, trimmed);
+    setRenamePending(false);
+
+    if (result.error) {
+      setRenameError(result.error);
+      return;
+    }
+
+    setRenaming(false);
+    onRenamed(trimmed);
+  }
+
+  async function handleDelete() {
+    setDeletePending(true);
+    setDeleteError(null);
+    const result = await deleteThread(thread.id, worldSlug);
+    setDeletePending(false);
+
+    if (result.error) {
+      setDeleteError(result.error);
+      return;
+    }
+
+    setDeleteDialogOpen(false);
+    onDeleted();
+  }
+
+  if (renaming) {
+    return (
+      <div className="flex flex-col gap-1 px-2 py-1.5 pl-9">
+        <input
+          autoFocus
+          value={titleInput}
+          onChange={(e) => setTitleInput(e.target.value)}
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commitRename();
+            } else if (e.key === "Escape") {
+              setRenaming(false);
+              setTitleInput(thread.title);
+            }
+          }}
+          onBlur={commitRename}
+          disabled={renamePending}
+          className="w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-1 text-sm text-zinc-50 outline-none focus:border-[var(--world-accent)]/50"
+        />
+        {renameError && <p className="text-xs text-red-400">{renameError}</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="group flex items-center gap-1 pl-9 pr-2">
+      <button
+        type="button"
+        onClick={onSelect}
+        className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg py-1.5 text-left text-sm transition-colors ${
+          isSelected
+            ? "text-white"
+            : "text-zinc-400 hover:text-white"
+        }`}
+      >
+        <MessageSquare className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+        <span className="truncate">{thread.title}</span>
+        {isNew && (
+          <span className="shrink-0 rounded-full bg-[var(--world-accent)] px-1.5 py-0.5 text-[10px] font-semibold text-white">
+            New
+          </span>
+        )}
+        {thread.is_pinned && (
+          <Pin className="h-3 w-3 shrink-0 text-[var(--world-accent)]" />
+        )}
+        {thread.is_locked && (
+          <Lock className="h-3 w-3 shrink-0 text-zinc-500" />
+        )}
+      </button>
+
+      {canManage && (
+        <div className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100">
+          <ActionMenu
+            items={[
+              {
+                key: "rename",
+                label: "Rename",
+                icon: Pencil,
+                onSelect: () => setRenaming(true),
+              },
+              {
+                key: "delete",
+                label: "Delete",
+                icon: Trash2,
+                danger: true,
+                onSelect: () => setDeleteDialogOpen(true),
+              },
+            ]}
+          />
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Delete thread?"
+        description={`This deletes "${thread.title}" and all of its posts. This can't be undone.`}
+        pending={deletePending}
+        error={deleteError}
+        onConfirm={handleDelete}
+      />
+    </div>
+  );
+}
+
 function FolderItem({
   folder,
   worldId,
   worldSlug,
   isOwner,
+  currentUserId,
   selectedThreadId,
   selectedFolderId,
   newThreadIds,
   onSelectThread,
   onThreadCreated,
+  onFolderRenamed,
+  onFolderDeleted,
+  onThreadRenamed,
+  onThreadDeleted,
 }: {
   folder: WorldFolder;
   worldId: string;
   worldSlug: string;
   isOwner: boolean;
+  currentUserId: string | null;
   selectedThreadId: string | null;
   selectedFolderId: string | null;
   newThreadIds: Set<string>;
   onSelectThread: (thread: WorldThread) => void;
   onThreadCreated: (folderId: string, thread: WorldThread) => void;
+  onFolderRenamed: (folderId: string, name: string) => void;
+  onFolderDeleted: (folderId: string) => void;
+  onThreadRenamed: (threadId: string, title: string) => void;
+  onThreadDeleted: (threadId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [nameInput, setNameInput] = useState(folder.name);
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [renamePending, setRenamePending] = useState(false);
 
-  useEffect(() => {
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const [prevSelectedFolderId, setPrevSelectedFolderId] = useState(selectedFolderId);
+
+  if (selectedFolderId !== prevSelectedFolderId) {
+    setPrevSelectedFolderId(selectedFolderId);
     if (selectedFolderId === folder.id) {
       setOpen(true);
     }
-  }, [folder.id, selectedFolderId]);
+  }
+
+  async function commitRename() {
+    const trimmed = nameInput.trim();
+
+    if (!trimmed || trimmed === folder.name) {
+      setRenaming(false);
+      setNameInput(folder.name);
+      return;
+    }
+
+    setRenamePending(true);
+    setRenameError(null);
+    const result = await renameFolder(folder.id, worldSlug, trimmed);
+    setRenamePending(false);
+
+    if (result.error) {
+      setRenameError(result.error);
+      return;
+    }
+
+    setRenaming(false);
+    onFolderRenamed(folder.id, trimmed);
+  }
+
+  async function handleDelete() {
+    setDeletePending(true);
+    setDeleteError(null);
+    const result = await deleteFolder(folder.id, worldSlug);
+    setDeletePending(false);
+
+    if (result.error) {
+      setDeleteError(result.error);
+      return;
+    }
+
+    setDeleteDialogOpen(false);
+    onFolderDeleted(folder.id);
+  }
 
   return (
     <div>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm font-medium text-zinc-300 transition-colors hover:bg-white/5 hover:text-white"
-      >
-        {open ? (
-          <ChevronDown className="h-4 w-4 shrink-0 text-zinc-500" />
+      <div className="group flex items-center gap-1 pr-2">
+        {renaming ? (
+          <div className="flex min-w-0 flex-1 flex-col gap-1 px-2 py-1.5">
+            <input
+              autoFocus
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitRename();
+                } else if (e.key === "Escape") {
+                  setRenaming(false);
+                  setNameInput(folder.name);
+                }
+              }}
+              onBlur={commitRename}
+              disabled={renamePending}
+              className="w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-1 text-sm font-medium text-zinc-50 outline-none focus:border-[var(--world-accent)]/50"
+            />
+            {renameError && <p className="text-xs text-red-400">{renameError}</p>}
+          </div>
         ) : (
-          <ChevronRight className="h-4 w-4 shrink-0 text-zinc-500" />
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm font-medium text-zinc-300 transition-colors hover:bg-white/5 hover:text-white"
+          >
+            {open ? (
+              <ChevronDown className="h-4 w-4 shrink-0 text-zinc-500" />
+            ) : (
+              <ChevronRight className="h-4 w-4 shrink-0 text-zinc-500" />
+            )}
+            <Folder className="h-4 w-4 shrink-0 text-zinc-500" />
+            <span className="truncate">{folder.name}</span>
+          </button>
         )}
-        <Folder className="h-4 w-4 shrink-0 text-zinc-500" />
-        <span className="truncate">{folder.name}</span>
-      </button>
+
+        {isOwner && !renaming && (
+          <div className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100">
+            <ActionMenu
+              items={[
+                {
+                  key: "rename",
+                  label: "Rename",
+                  icon: Pencil,
+                  onSelect: () => setRenaming(true),
+                },
+                {
+                  key: "delete",
+                  label: "Delete",
+                  icon: Trash2,
+                  danger: true,
+                  onSelect: () => setDeleteDialogOpen(true),
+                },
+              ]}
+            />
+          </div>
+        )}
+      </div>
+
       {open && (
         <div className="flex flex-col gap-0.5">
           {folder.threads.length === 0 ? (
@@ -164,30 +437,17 @@ function FolderItem({
             </p>
           ) : (
             folder.threads.map((thread) => (
-              <button
+              <ThreadRow
                 key={thread.id}
-                type="button"
-                onClick={() => onSelectThread(thread)}
-                className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 pl-9 text-left text-sm transition-colors ${
-                  selectedThreadId === thread.id
-                    ? "bg-[var(--world-accent)]/15 text-white"
-                    : "text-zinc-400 hover:bg-white/5 hover:text-white"
-                }`}
-              >
-                <MessageSquare className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
-                <span className="truncate">{thread.title}</span>
-                {newThreadIds.has(thread.id) && (
-                  <span className="shrink-0 rounded-full bg-[var(--world-accent)] px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                    New
-                  </span>
-                )}
-                {thread.is_pinned && (
-                  <Pin className="h-3 w-3 shrink-0 text-[var(--world-accent)]" />
-                )}
-                {thread.is_locked && (
-                  <Lock className="h-3 w-3 shrink-0 text-zinc-500" />
-                )}
-              </button>
+                thread={thread}
+                isSelected={selectedThreadId === thread.id}
+                isNew={newThreadIds.has(thread.id)}
+                canManage={isOwner || thread.author_id === currentUserId}
+                worldSlug={worldSlug}
+                onSelect={() => onSelectThread(thread)}
+                onRenamed={(title) => onThreadRenamed(thread.id, title)}
+                onDeleted={() => onThreadDeleted(thread.id)}
+              />
             ))
           )}
 
@@ -201,6 +461,16 @@ function FolderItem({
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Delete folder?"
+        description={`This deletes "${folder.name}" and all ${folder.threads.length} thread${folder.threads.length === 1 ? "" : "s"} inside it, along with their posts. This can't be undone.`}
+        pending={deletePending}
+        error={deleteError}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }
@@ -299,25 +569,38 @@ export function WorldSidebar({
   worldSlug,
   folders: initialFolders,
   isOwner,
+  currentUserId,
   selectedThreadId,
   selectedFolderId,
   onSelectThread,
+  onFolderDeleted,
+  onThreadDeleted,
+  onThreadRenamed,
 }: {
   worldId: string;
   worldSlug: string;
   folders: WorldFolder[];
   isOwner: boolean;
+  currentUserId: string | null;
   selectedThreadId: string | null;
   selectedFolderId: string | null;
   onSelectThread: (thread: WorldThread) => void;
+  onFolderDeleted: (folderId: string) => void;
+  onThreadDeleted: (threadId: string) => void;
+  onThreadRenamed: (threadId: string, title: string) => void;
 }) {
   const [folders, setFolders] = useState(initialFolders);
   const [newThreadIds, setNewThreadIds] = useState<Set<string>>(new Set());
   const foldersRef = useRef(folders);
+  const callbacksRef = useRef({ onFolderDeleted, onThreadDeleted, onThreadRenamed });
 
   useEffect(() => {
     foldersRef.current = folders;
   }, [folders]);
+
+  useEffect(() => {
+    callbacksRef.current = { onFolderDeleted, onThreadDeleted, onThreadRenamed };
+  }, [onFolderDeleted, onThreadDeleted, onThreadRenamed]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -330,22 +613,11 @@ export function WorldSidebar({
         data: { session },
       } = await supabase.auth.getSession();
 
-      console.log(
-        "[Realtime] session present:",
-        !!session,
-        session?.access_token?.slice(0, 20) ?? "none",
-      );
-
       if (cancelled) return;
 
       if (session) {
         supabase.realtime.setAuth(session.access_token);
       }
-
-      console.log(
-        "[Realtime] world-threads: subscribing with filter",
-        `world_id=eq.${worldId}`,
-      );
 
       threadsChannel = supabase
         .channel(`world-threads:${worldId}`)
@@ -358,23 +630,20 @@ export function WorldSidebar({
             filter: `world_id=eq.${worldId}`,
           },
           (payload) => {
-            console.log("[Realtime] world_threads INSERT received", payload);
             const newThread = payload.new as {
               id: string;
               folder_id: string;
               title: string;
               is_pinned: boolean;
               is_locked: boolean;
+              author_id: string;
             };
 
             const alreadyExists = foldersRef.current.some((folder) =>
               folder.threads.some((thread) => thread.id === newThread.id),
             );
 
-            if (alreadyExists) {
-              console.log("[Realtime] world_threads: skipping duplicate", newThread.id);
-              return;
-            }
+            if (alreadyExists) return;
 
             setFolders((current) =>
               current.map((folder) =>
@@ -389,6 +658,7 @@ export function WorldSidebar({
                           title: newThread.title,
                           is_pinned: newThread.is_pinned,
                           is_locked: newThread.is_locked,
+                          author_id: newThread.author_id,
                         },
                       ],
                     }
@@ -399,14 +669,65 @@ export function WorldSidebar({
             setNewThreadIds((current) => new Set(current).add(newThread.id));
           },
         )
-        .subscribe((status, err) => {
-          console.log("[Realtime] world-threads channel status:", status, err ?? "");
-        });
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "world_threads",
+            filter: `world_id=eq.${worldId}`,
+          },
+          (payload) => {
+            const updated = payload.new as {
+              id: string;
+              folder_id: string;
+              title: string;
+              is_pinned: boolean;
+              is_locked: boolean;
+              author_id: string;
+            };
 
-      console.log(
-        "[Realtime] world-folders: subscribing with filter",
-        `world_id=eq.${worldId}`,
-      );
+            setFolders((current) =>
+              current.map((folder) => ({
+                ...folder,
+                threads: folder.threads.map((thread) =>
+                  thread.id === updated.id
+                    ? {
+                        ...thread,
+                        title: updated.title,
+                        is_pinned: updated.is_pinned,
+                        is_locked: updated.is_locked,
+                      }
+                    : thread,
+                ),
+              })),
+            );
+
+            callbacksRef.current.onThreadRenamed(updated.id, updated.title);
+          },
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "DELETE",
+            schema: "public",
+            table: "world_threads",
+            filter: `world_id=eq.${worldId}`,
+          },
+          (payload) => {
+            const deleted = payload.old as { id: string };
+
+            setFolders((current) =>
+              current.map((folder) => ({
+                ...folder,
+                threads: folder.threads.filter((thread) => thread.id !== deleted.id),
+              })),
+            );
+
+            callbacksRef.current.onThreadDeleted(deleted.id);
+          },
+        )
+        .subscribe();
 
       foldersChannel = supabase
         .channel(`world-folders:${worldId}`)
@@ -419,17 +740,13 @@ export function WorldSidebar({
             filter: `world_id=eq.${worldId}`,
           },
           (payload) => {
-            console.log("[Realtime] world_folders INSERT fired — raw payload:", payload);
             const newFolder = payload.new as { id: string; name: string };
 
             const alreadyExists = foldersRef.current.some(
               (folder) => folder.id === newFolder.id,
             );
 
-            if (alreadyExists) {
-              console.log("[Realtime] world_folders: skipping duplicate", newFolder.id);
-              return;
-            }
+            if (alreadyExists) return;
 
             setFolders((current) => [
               ...current,
@@ -437,9 +754,40 @@ export function WorldSidebar({
             ]);
           },
         )
-        .subscribe((status, err) => {
-          console.log("[Realtime] world-folders channel status:", status, err ?? "");
-        });
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "world_folders",
+            filter: `world_id=eq.${worldId}`,
+          },
+          (payload) => {
+            const updated = payload.new as { id: string; name: string };
+
+            setFolders((current) =>
+              current.map((folder) =>
+                folder.id === updated.id ? { ...folder, name: updated.name } : folder,
+              ),
+            );
+          },
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "DELETE",
+            schema: "public",
+            table: "world_folders",
+            filter: `world_id=eq.${worldId}`,
+          },
+          (payload) => {
+            const deleted = payload.old as { id: string };
+
+            setFolders((current) => current.filter((folder) => folder.id !== deleted.id));
+            callbacksRef.current.onFolderDeleted(deleted.id);
+          },
+        )
+        .subscribe();
     }
 
     subscribe();
@@ -473,6 +821,39 @@ export function WorldSidebar({
     onSelectThread(thread);
   }
 
+  function handleFolderRenamed(folderId: string, name: string) {
+    setFolders((current) =>
+      current.map((folder) => (folder.id === folderId ? { ...folder, name } : folder)),
+    );
+  }
+
+  function handleFolderDeleted(folderId: string) {
+    setFolders((current) => current.filter((folder) => folder.id !== folderId));
+    onFolderDeleted(folderId);
+  }
+
+  function handleThreadRenamed(threadId: string, title: string) {
+    setFolders((current) =>
+      current.map((folder) => ({
+        ...folder,
+        threads: folder.threads.map((thread) =>
+          thread.id === threadId ? { ...thread, title } : thread,
+        ),
+      })),
+    );
+    onThreadRenamed(threadId, title);
+  }
+
+  function handleThreadDeleted(threadId: string) {
+    setFolders((current) =>
+      current.map((folder) => ({
+        ...folder,
+        threads: folder.threads.filter((thread) => thread.id !== threadId),
+      })),
+    );
+    onThreadDeleted(threadId);
+  }
+
   return (
     <aside className="w-64 shrink-0 rounded-2xl border border-white/10 bg-white/[0.02] p-3">
       {isOwner && (
@@ -501,11 +882,16 @@ export function WorldSidebar({
               worldId={worldId}
               worldSlug={worldSlug}
               isOwner={isOwner}
+              currentUserId={currentUserId}
               selectedThreadId={selectedThreadId}
               selectedFolderId={selectedFolderId}
               newThreadIds={newThreadIds}
               onSelectThread={handleSelectThread}
               onThreadCreated={handleThreadCreated}
+              onFolderRenamed={handleFolderRenamed}
+              onFolderDeleted={handleFolderDeleted}
+              onThreadRenamed={handleThreadRenamed}
+              onThreadDeleted={handleThreadDeleted}
             />
           ))}
         </div>

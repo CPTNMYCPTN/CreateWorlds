@@ -69,6 +69,10 @@ create policy "Members are visible to other members of the same world"
   using (
     user_id = auth.uid()
     or exists (
+      select 1 from public.worlds w
+      where w.id = world_members.world_id and w.owner_id = auth.uid()
+    )
+    or exists (
       select 1 from public.world_members m
       where m.world_id = world_members.world_id and m.user_id = auth.uid()
     )
@@ -93,6 +97,44 @@ create policy "Users can join worlds they are invited to or public worlds"
     )
   );
 
+create policy "Owners can update member roles"
+  on public.world_members for update
+  using (
+    role <> 'owner'
+    and exists (
+      select 1 from public.worlds w
+      where w.id = world_members.world_id and w.owner_id = auth.uid()
+    )
+  )
+  with check (
+    role <> 'owner'
+    and exists (
+      select 1 from public.worlds w
+      where w.id = world_members.world_id and w.owner_id = auth.uid()
+    )
+  );
+
+create policy "Owners and admins can remove members"
+  on public.world_members for delete
+  using (
+    role <> 'owner'
+    and (
+      exists (
+        select 1 from public.worlds w
+        where w.id = world_members.world_id and w.owner_id = auth.uid()
+      )
+      or (
+        role = 'member'
+        and exists (
+          select 1 from public.world_members admin_row
+          where admin_row.world_id = world_members.world_id
+          and admin_row.user_id = auth.uid()
+          and admin_row.role = 'admin'
+        )
+      )
+    )
+  );
+
 create policy "Anyone can read invites by code"
   on public.world_invites for select
   using (true);
@@ -111,6 +153,36 @@ create policy "Owners can manage invites for their worlds"
       where w.id = world_invites.world_id and w.owner_id = auth.uid()
     )
   );
+
+-- Lets a viewer who is not yet a member preview the world behind a valid,
+-- unexpired, not-maxed-out invite code, bypassing the normal worlds SELECT
+-- RLS (which would otherwise hide private worlds from non-members).
+create or replace function public.get_invite_world(invite_code text)
+returns table (
+  id uuid,
+  name text,
+  slug text,
+  description text,
+  is_public boolean,
+  banner_url text,
+  icon_url text
+)
+language sql
+security definer
+set search_path = public, pg_temp
+stable
+as $$
+  select w.id, w.name, w.slug, w.description, w.is_public, w.banner_url, w.icon_url
+  from public.world_invites i
+  join public.worlds w on w.id = i.world_id
+  where i.code = invite_code
+    and (i.expires_at is null or i.expires_at > now())
+    and (i.max_uses is null or i.uses < i.max_uses)
+  limit 1;
+$$;
+
+revoke all on function public.get_invite_world(text) from public;
+grant execute on function public.get_invite_world(text) to anon, authenticated;
 
 -- Storage ------------------------------------------------------------
 
@@ -230,6 +302,33 @@ create policy "World members can create threads"
     )
   );
 
+create policy "Thread author or world owner can update threads"
+  on public.world_threads for update
+  using (
+    author_id = auth.uid()
+    or exists (
+      select 1 from public.worlds w
+      where w.id = world_threads.world_id and w.owner_id = auth.uid()
+    )
+  )
+  with check (
+    author_id = auth.uid()
+    or exists (
+      select 1 from public.worlds w
+      where w.id = world_threads.world_id and w.owner_id = auth.uid()
+    )
+  );
+
+create policy "Thread author or world owner can delete threads"
+  on public.world_threads for delete
+  using (
+    author_id = auth.uid()
+    or exists (
+      select 1 from public.worlds w
+      where w.id = world_threads.world_id and w.owner_id = auth.uid()
+    )
+  );
+
 -- Profiles ------------------------------------------------------------------
 
 create table if not exists public.profiles (
@@ -322,6 +421,33 @@ create policy "World members can create posts"
     )
   );
 
+create policy "Post author or world owner can update posts"
+  on public.world_posts for update
+  using (
+    author_id = auth.uid()
+    or exists (
+      select 1 from public.worlds w
+      where w.id = world_posts.world_id and w.owner_id = auth.uid()
+    )
+  )
+  with check (
+    author_id = auth.uid()
+    or exists (
+      select 1 from public.worlds w
+      where w.id = world_posts.world_id and w.owner_id = auth.uid()
+    )
+  );
+
+create policy "Post author or world owner can delete posts"
+  on public.world_posts for delete
+  using (
+    author_id = auth.uid()
+    or exists (
+      select 1 from public.worlds w
+      where w.id = world_posts.world_id and w.owner_id = auth.uid()
+    )
+  );
+
 -- Storage ------------------------------------------------------------
 
 insert into storage.buckets (id, name, public)
@@ -376,9 +502,9 @@ create policy "Users can manage their own characters"
   using (owner_id = auth.uid())
   with check (owner_id = auth.uid());
 
-create policy "Characters are publicly visible"
-  on public.characters for select
-  using (true);
+-- Replaced by narrower visibility rules below: owner, or imported into a
+-- world the viewer can see (see character_visible_via_world).
+drop policy if exists "Characters are publicly visible" on public.characters;
 
 -- Storage ------------------------------------------------------------
 
@@ -593,24 +719,43 @@ create policy "Character owners can remove their world imports"
   );
 
 -- Characters imported into a shared world are visible to its members --------
-
-create policy "Imported characters are visible to world members"
-  on public.characters for select
-  using (
-    exists (
-      select 1 from public.world_characters wc
-      join public.worlds w on w.id = wc.world_id
-      where wc.character_id = characters.id
-      and (
-        w.is_public
-        or w.owner_id = auth.uid()
-        or exists (
-          select 1 from public.world_members m
-          where m.world_id = w.id and m.user_id = auth.uid()
-        )
+--
+-- security definer so this can be safely called from the characters and
+-- character_templates RLS policies below without depending on the calling
+-- user already having independent SELECT rights on world_characters/worlds
+-- at evaluation time (and to keep the visibility logic in one place instead
+-- of duplicated across policies, where it previously drifted out of sync).
+create or replace function public.character_visible_via_world(target_character_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.world_characters wc
+    join public.worlds w on w.id = wc.world_id
+    where wc.character_id = target_character_id
+    and (
+      w.is_public
+      or w.owner_id = auth.uid()
+      or exists (
+        select 1 from public.world_members m
+        where m.world_id = w.id and m.user_id = auth.uid()
       )
     )
   );
+$$;
+
+grant execute on function public.character_visible_via_world(uuid) to authenticated, anon;
+
+drop policy if exists "Imported characters are visible to world members" on public.characters;
+
+create policy "Imported characters are visible to world members"
+  on public.characters for select
+  using (public.character_visible_via_world(characters.id));
+
+drop policy if exists "Templates used by visible characters are visible too" on public.character_templates;
 
 create policy "Templates used by visible characters are visible too"
   on public.character_templates for select
@@ -620,19 +765,7 @@ create policy "Templates used by visible characters are visible too"
       where c.template_id = character_templates.id
       and (
         c.owner_id = auth.uid()
-        or exists (
-          select 1 from public.world_characters wc
-          join public.worlds w on w.id = wc.world_id
-          where wc.character_id = c.id
-          and (
-            w.is_public
-            or w.owner_id = auth.uid()
-            or exists (
-              select 1 from public.world_members m
-              where m.world_id = w.id and m.user_id = auth.uid()
-            )
-          )
-        )
+        or public.character_visible_via_world(c.id)
       )
     )
   );
