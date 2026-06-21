@@ -819,3 +819,26 @@ create policy "Users can update their own profile avatar"
     bucket_id = 'profile-avatars'
     and auth.uid()::text = (storage.foldername(name))[1]
   );
+
+-- Wiki pages ------------------------------------------------------------
+--
+-- wiki_pages and its RLS policies already exist in the live database
+-- (applied manually). This block is reference-only documentation of the
+-- table shape the app code expects — it is intentionally commented out and
+-- must NOT be run as a migration. The self-referencing FK follows Postgres's
+-- default auto-naming convention, which the app relies on for FK-qualified
+-- embeds: wiki_pages_parent_page_id_fkey.
+--
+-- create table public.wiki_pages (
+--   id uuid primary key default gen_random_uuid(),
+--   world_id uuid not null references public.worlds (id) on delete cascade,
+--   parent_page_id uuid references public.wiki_pages (id) on delete set null,
+--   slug text not null,
+--   title text not null,
+--   content text not null default '',
+--   position integer not null default 0,
+--   created_by uuid references auth.users (id) on delete set null,
+--   created_at timestamptz not null default now(),
+--   updated_at timestamptz not null default now(),
+--   unique (world_id, slug)
+-- );

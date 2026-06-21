@@ -124,7 +124,7 @@ function ColorButton({
   );
 }
 
-function Toolbar({ editor }: { editor: Editor }) {
+export function Toolbar({ editor }: { editor: Editor }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);

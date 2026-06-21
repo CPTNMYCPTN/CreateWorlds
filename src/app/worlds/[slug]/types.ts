@@ -38,6 +38,33 @@ export type WorldCharacter = {
   character: WorldCharacterEntry | null;
 };
 
+export type WikiPageTreeItem = {
+  id: string;
+  parent_page_id: string | null;
+  slug: string;
+  title: string;
+  position: number;
+};
+
+export type WikiPageSummary = {
+  id: string;
+  slug: string;
+  title: string;
+};
+
+export type WikiPage = {
+  id: string;
+  world_id: string;
+  parent_page_id: string | null;
+  slug: string;
+  title: string;
+  content: string;
+  position: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type WorldMemberRole = "owner" | "admin" | "member";
 
 export type WorldMember = {

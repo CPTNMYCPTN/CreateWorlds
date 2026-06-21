@@ -116,6 +116,25 @@ body {
   text-decoration-color: color-mix(in srgb, var(--world-accent, var(--color-violet-400)) 70%, transparent);
 }
 
+.tiptap-content .wiki-link {
+  display: inline;
+  border-radius: 0.25rem;
+  padding: 0 0.2em;
+  background: color-mix(in srgb, var(--world-accent, var(--color-violet-400)) 16%, transparent);
+  color: var(--world-accent, var(--color-violet-400));
+  text-decoration: none;
+}
+
+.tiptap-content a.wiki-link:hover {
+  background: color-mix(in srgb, var(--world-accent, var(--color-violet-400)) 26%, transparent);
+}
+
+.tiptap-content .wiki-link-broken {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-zinc-500);
+  text-decoration: line-through;
+}
+
 .tiptap-content mark {
   border-radius: 0.2em;
   padding: 0.05em 0.2em;

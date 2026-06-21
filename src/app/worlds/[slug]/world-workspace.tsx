@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import * as Tabs from "@radix-ui/react-tabs";
 import { UserCircle2 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
@@ -208,6 +209,12 @@ export function WorldWorkspace({
                 >
                   Characters
                 </Tabs.Trigger>
+                <Link
+                  href={`/worlds/${worldSlug}/wiki`}
+                  className="rounded-t-lg px-3 py-2 text-sm font-medium text-zinc-400 transition-colors hover:text-white"
+                >
+                  Wiki
+                </Link>
                 {canManageMembers && (
                   <Tabs.Trigger
                     value="members"
