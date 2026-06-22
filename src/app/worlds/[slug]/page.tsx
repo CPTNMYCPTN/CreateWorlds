@@ -8,18 +8,12 @@ import { WorldWorkspace } from "./world-workspace";
 import { WorldInviteDialog } from "./world-invite-dialog";
 import {
   DEFAULT_WORLD_THEME,
+  FONT_FAMILY_VARS,
   type WorldCharacter,
-  type WorldFontFamily,
   type WorldMember,
   type WorldSettings,
 } from "./types";
-
-const FONT_FAMILY_VARS: Record<WorldFontFamily, string> = {
-  default: "inherit",
-  serif: "var(--font-world-serif), serif",
-  mono: "var(--font-world-mono), monospace",
-  fantasy: "var(--font-world-fantasy), serif",
-};
+import type { WikiLinkTarget } from "@/components/wiki-link";
 
 const BANNER_STYLE_CLASSES: Record<string, string> = {
   solid: "bg-[var(--world-accent)]/10",
@@ -72,6 +66,7 @@ export default async function WorldPage({
     { data: worldCharacters },
     { data: profile },
     { data: invites },
+    { data: wikiPages },
   ] = await Promise.all([
     supabase
       .from("world_members")
@@ -128,6 +123,7 @@ export default async function WorldPage({
       .select("id, code, created_at, expires_at, max_uses, uses")
       .eq("world_id", world.id)
       .order("created_at", { ascending: false }),
+    supabase.from("wiki_pages").select("id, slug, title").eq("world_id", world.id),
   ]);
 
   const isMember = !!membership;
@@ -309,6 +305,7 @@ ${customCss}`,
         characters={(worldCharacters ?? []) as unknown as WorldCharacter[]}
         members={members}
         currentUser={currentUser}
+        wikiPages={(wikiPages ?? []) as WikiLinkTarget[]}
       />
     </div>
   );

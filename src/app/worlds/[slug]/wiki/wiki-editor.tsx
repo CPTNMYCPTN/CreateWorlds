@@ -20,16 +20,22 @@ import TableCell from "@tiptap/extension-table-cell";
 import Placeholder from "@tiptap/extension-placeholder";
 import { Toolbar } from "../post-editor";
 import { WikiLink, type WikiLinkTarget } from "@/components/wiki-link";
+import { ForumLink } from "@/components/forum-link";
+import type { ForumFolderSummary, ForumThreadSummary } from "./wiki-content";
 
 export function WikiEditor({
   content,
   onChange,
   pages,
+  threads,
+  folders,
   placeholder,
 }: {
   content?: string;
   onChange: (html: string) => void;
   pages: WikiLinkTarget[];
+  threads: ForumThreadSummary[];
+  folders: ForumFolderSummary[];
   placeholder?: string;
 }) {
   const editor = useEditor({
@@ -69,6 +75,12 @@ export function WikiEditor({
         placeholder: placeholder ?? "Write the page content...",
       }),
       WikiLink.configure({ getItems: () => pages }),
+      ForumLink.configure({
+        getItems: () => [
+          ...folders.map((f) => ({ id: f.id, label: f.name, type: "folder" as const })),
+          ...threads.map((t) => ({ id: t.id, label: t.title, type: "thread" as const })),
+        ],
+      }),
     ],
     content: content ?? "",
     immediatelyRender: false,

@@ -128,11 +128,29 @@ async function validateParent(
     return "Selected parent page is not valid.";
   }
 
-  // Guards against the immediate one-level cycle (assigning a direct child
-  // as the new parent). Deeper cycles are not checked for v1 — see the
-  // implementation notes shared alongside this feature.
-  if (selfId && parentRow.parent_page_id === selfId) {
-    return "Can't set a child page as the parent — that would create a loop.";
+  // Full ancestor walk: reject if selfId appears anywhere above the proposed
+  // parent (not just as its immediate parent), which would otherwise create
+  // a cycle. Bounded to guard against a pre-existing cycle in the data.
+  if (selfId) {
+    let cursor: string | null = parentRow.parent_page_id;
+    let hops = 0;
+
+    while (cursor && hops < 50) {
+      if (cursor === selfId) {
+        return "Can't set a descendant page as the parent — that would create a loop.";
+      }
+
+      const { data: ancestorRow, error: ancestorError } = await supabase
+        .from("wiki_pages")
+        .select("parent_page_id")
+        .eq("id", cursor)
+        .maybeSingle();
+
+      logWikiError("ancestor walk lookup failed", ancestorError);
+
+      cursor = ancestorRow?.parent_page_id ?? null;
+      hops += 1;
+    }
   }
 
   return null;

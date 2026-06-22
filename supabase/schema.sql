@@ -837,7 +837,7 @@ create policy "Users can update their own profile avatar"
 --   title text not null,
 --   content text not null default '',
 --   position integer not null default 0,
---   created_by uuid references auth.users (id) on delete set null,
+--   created_by uuid not null references auth.users (id),
 --   created_at timestamptz not null default now(),
 --   updated_at timestamptz not null default now(),
 --   unique (world_id, slug)

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronRight } from "lucide-react";
 import { createClient } from "@/utils/supabase/server";
 import { renderWikiContent } from "../wiki-content";
 import { logWikiError } from "../log-error";
@@ -27,7 +27,7 @@ export default async function WikiPageView({
 
   const { data: world } = await supabase
     .from("worlds")
-    .select("id, owner_id")
+    .select("id, name, owner_id")
     .eq("slug", slug)
     .single();
 
@@ -38,7 +38,7 @@ export default async function WikiPageView({
   const { data: page, error: pageError } = await supabase
     .from("wiki_pages")
     .select(
-      "id, world_id, parent_page_id, slug, title, content, created_by, created_at, updated_at, parent:wiki_pages!wiki_pages_parent_page_id_fkey(id, slug, title, parent_page_id)",
+      "id, world_id, parent_page_id, slug, title, content, created_by, created_at, updated_at",
     )
     .eq("world_id", world.id)
     .eq("slug", pageSlug)
@@ -66,11 +66,24 @@ export default async function WikiPageView({
   const canManage = isOwner || memberRow?.role === "admin";
 
   // Walk the parent chain for the breadcrumb. Bounded to avoid a runaway
-  // loop if a cycle were ever introduced directly against the DB.
-  const rawParent = page.parent as unknown as ParentLink | ParentLink[] | null;
-  let nextParent: ParentLink | null = Array.isArray(rawParent)
-    ? rawParent[0] ?? null
-    : rawParent ?? null;
+  // loop if a cycle were ever introduced directly against the DB. Each hop
+  // (including the first) is a plain by-id query, not an embed — PostgREST
+  // was hitting a schema-cache issue (PGRST200) resolving the FK-qualified
+  // embed even though the FK constraint itself is correct in the live DB.
+  let nextParent: ParentLink | null = null;
+
+  if (page.parent_page_id) {
+    const { data: firstParent, error: firstParentError } = await supabase
+      .from("wiki_pages")
+      .select("id, slug, title, parent_page_id")
+      .eq("id", page.parent_page_id)
+      .maybeSingle();
+
+    logWikiError("breadcrumb first parent lookup failed", firstParentError);
+
+    nextParent = firstParent ?? null;
+  }
+
   const breadcrumb: { slug: string; title: string }[] = [];
   let hops = 0;
 
@@ -94,23 +107,57 @@ export default async function WikiPageView({
     hops += 1;
   }
 
-  const [{ data: children, error: childrenError }, { data: allPages, error: allPagesError }] =
-    await Promise.all([
-      supabase
-        .from("wiki_pages")
-        .select("id, slug, title")
-        .eq("parent_page_id", page.id)
-        .order("position"),
-      supabase.from("wiki_pages").select("id, slug, title").eq("world_id", world.id),
-    ]);
+  const [
+    { data: children, error: childrenError },
+    { data: allPages, error: allPagesError },
+    { data: creatorProfile, error: creatorError },
+    { data: threads, error: threadsError },
+    { data: folders, error: foldersError },
+  ] = await Promise.all([
+    supabase
+      .from("wiki_pages")
+      .select("id, slug, title")
+      .eq("parent_page_id", page.id)
+      .order("position"),
+    supabase.from("wiki_pages").select("id, slug, title").eq("world_id", world.id),
+    // wiki_pages.created_by references auth.users(id), not public.profiles(id),
+    // so there's no FK PostgREST can embed across — fetch separately and merge,
+    // same pattern used for world_members/profiles elsewhere in this app.
+    page.created_by
+      ? supabase
+          .from("profiles")
+          .select("id, username, display_name, avatar_url")
+          .eq("id", page.created_by)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    supabase.from("world_threads").select("id, title").eq("world_id", world.id),
+    supabase.from("world_folders").select("id, name").eq("world_id", world.id),
+  ]);
 
   logWikiError("children fetch failed", childrenError);
   logWikiError("world wiki pages fetch failed", allPagesError);
+  logWikiError("creator profile fetch failed", creatorError);
+  logWikiError("page view world threads fetch failed", threadsError);
+  logWikiError("page view world folders fetch failed", foldersError);
 
-  const renderedContent = renderWikiContent(page.content, allPages ?? [], slug);
+  const renderedContent = renderWikiContent(
+    page.content,
+    allPages ?? [],
+    slug,
+    threads ?? [],
+    folders ?? [],
+  );
 
   return (
     <div>
+      <Link
+        href={`/worlds/${slug}`}
+        className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-sm text-zinc-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        {world.name}
+      </Link>
+
       <nav className="mb-4 flex flex-wrap items-center gap-1.5 text-sm text-zinc-500">
         <Link href={`/worlds/${slug}/wiki`} className="hover:text-zinc-300">
           Wiki
@@ -130,7 +177,20 @@ export default async function WikiPageView({
       </nav>
 
       <div className="flex items-start justify-between gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight">{page.title}</h1>
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{page.title}</h1>
+          {creatorProfile && (
+            <p className="mt-1 text-xs text-zinc-500">
+              by{" "}
+              <Link
+                href={`/users/${creatorProfile.username}`}
+                className="hover:text-zinc-300"
+              >
+                @{creatorProfile.username}
+              </Link>
+            </p>
+          )}
+        </div>
         {canManage && (
           <WikiPageViewActions
             worldId={world.id}

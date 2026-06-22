@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { WikiEditor } from "./wiki-editor";
 import { createWikiPage, updateWikiPage, type WikiPageFormState } from "./actions";
 import type { WikiPageTreeItem } from "../types";
+import type { ForumFolderSummary, ForumThreadSummary } from "./wiki-content";
 
 function slugify(value: string) {
   return value
@@ -16,18 +17,26 @@ function slugify(value: string) {
     .replace(/^-+|-+$/g, "");
 }
 
+function isHtmlContentEmpty(html: string) {
+  return html.replace(/<[^>]*>/g, "").trim().length === 0;
+}
+
 const initialState: WikiPageFormState = { error: null };
 
 export function WikiPageForm({
   worldId,
   worldSlug,
   pages,
+  threads,
+  folders,
   mode,
   page,
 }: {
   worldId: string;
   worldSlug: string;
   pages: WikiPageTreeItem[];
+  threads: ForumThreadSummary[];
+  folders: ForumFolderSummary[];
   mode: "create" | "edit";
   page?: {
     id: string;
@@ -65,6 +74,7 @@ export function WikiPageForm({
   }
 
   const parentOptions = pages.filter((candidate) => candidate.id !== page?.id);
+  const isSubmitDisabled = pending || !title.trim() || isHtmlContentEmpty(content);
 
   return (
     <form action={formAction} className="flex flex-col gap-6">
@@ -131,7 +141,9 @@ export function WikiPageForm({
             content={content}
             onChange={setContent}
             pages={pages}
-            placeholder="Write the page content... type [[ to link another page"
+            threads={threads}
+            folders={folders}
+            placeholder="Write the page content... type [[ to link a page, ## to link a thread or folder"
           />
         </div>
       </div>
@@ -148,7 +160,7 @@ export function WikiPageForm({
         </button>
         <button
           type="submit"
-          disabled={pending}
+          disabled={isSubmitDisabled}
           className="inline-flex items-center justify-center rounded-full bg-[var(--world-accent,#a78bfa)] px-5 py-2 text-sm font-semibold text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {pending ? "Saving..." : mode === "edit" ? "Save changes" : "Create page"}

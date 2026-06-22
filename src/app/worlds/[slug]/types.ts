@@ -81,6 +81,13 @@ export type HeaderStyle = "solid" | "gradient" | "transparent";
 
 export type WorldFontFamily = "default" | "serif" | "mono" | "fantasy";
 
+export const FONT_FAMILY_VARS: Record<WorldFontFamily, string> = {
+  default: "inherit",
+  serif: "var(--font-world-serif), serif",
+  mono: "var(--font-world-mono), monospace",
+  fantasy: "var(--font-world-fantasy), serif",
+};
+
 export type WorldTheme = {
   accentColor: string;
   bgColor: string;

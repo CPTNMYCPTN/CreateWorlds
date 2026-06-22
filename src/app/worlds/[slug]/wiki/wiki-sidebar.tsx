@@ -29,14 +29,25 @@ function WikiTreeNode({
   depth,
   worldSlug,
   activeSlug,
+  visited,
 }: {
   item: WikiPageTreeItem;
   childrenMap: Map<string | null, WikiPageTreeItem[]>;
   depth: number;
   worldSlug: string;
   activeSlug: string | null;
+  visited: Set<string>;
 }) {
   const [open, setOpen] = useState(true);
+
+  // Defensive backstop independent of the server-side cycle check in
+  // wiki/actions.ts — if a cycle ever existed in the data for any reason,
+  // skip re-rendering an already-visited node rather than recursing forever.
+  if (visited.has(item.id)) {
+    return null;
+  }
+
+  const childVisited = new Set(visited).add(item.id);
   const children = childrenMap.get(item.id) ?? [];
   const hasChildren = children.length > 0;
   const isActive = item.slug === activeSlug;
@@ -87,6 +98,7 @@ function WikiTreeNode({
               depth={depth + 1}
               worldSlug={worldSlug}
               activeSlug={activeSlug}
+              visited={childVisited}
             />
           ))}
         </div>
@@ -145,6 +157,7 @@ export function WikiSidebar({
               depth={0}
               worldSlug={worldSlug}
               activeSlug={activeSlug}
+              visited={new Set()}
             />
           ))}
         </div>

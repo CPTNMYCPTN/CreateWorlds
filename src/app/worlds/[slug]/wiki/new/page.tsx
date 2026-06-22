@@ -46,19 +46,36 @@ export default async function NewWikiPage({
     redirect(`/worlds/${slug}/wiki`);
   }
 
-  const { data: pages, error: pagesError } = await supabase
-    .from("wiki_pages")
-    .select("id, parent_page_id, slug, title, position")
-    .eq("world_id", world.id)
-    .order("position");
+  const [
+    { data: pages, error: pagesError },
+    { data: threads, error: threadsError },
+    { data: folders, error: foldersError },
+  ] = await Promise.all([
+    supabase
+      .from("wiki_pages")
+      .select("id, parent_page_id, slug, title, position")
+      .eq("world_id", world.id)
+      .order("position"),
+    supabase.from("world_threads").select("id, title").eq("world_id", world.id),
+    supabase.from("world_folders").select("id, name").eq("world_id", world.id),
+  ]);
 
   logWikiError("new page wiki pages fetch failed", pagesError);
+  logWikiError("new page world threads fetch failed", threadsError);
+  logWikiError("new page world folders fetch failed", foldersError);
 
   return (
     <div>
       <h1 className="text-xl font-semibold tracking-tight">New wiki page</h1>
       <div className="mt-6">
-        <WikiPageForm worldId={world.id} worldSlug={slug} pages={pages ?? []} mode="create" />
+        <WikiPageForm
+          worldId={world.id}
+          worldSlug={slug}
+          pages={pages ?? []}
+          threads={threads ?? []}
+          folders={folders ?? []}
+          mode="create"
+        />
       </div>
     </div>
   );

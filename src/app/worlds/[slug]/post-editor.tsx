@@ -20,6 +20,8 @@ import TableHeader from "@tiptap/extension-table-header";
 import TableCell from "@tiptap/extension-table-cell";
 import Placeholder from "@tiptap/extension-placeholder";
 import { createClient } from "@/utils/supabase/client";
+import { WikiLink, type WikiLinkTarget } from "@/components/wiki-link";
+import { ForumLink, type ForumLinkTarget } from "@/components/forum-link";
 import {
   Bold,
   Italic,
@@ -426,12 +428,16 @@ export function PostEditor({
   onEmptyChange,
   placeholder,
   autoFocus,
+  wikiPages,
+  forumItems,
 }: {
   content?: string;
   onChange: (html: string) => void;
   onEmptyChange: (empty: boolean) => void;
   placeholder?: string;
   autoFocus?: boolean;
+  wikiPages?: WikiLinkTarget[];
+  forumItems?: ForumLinkTarget[];
 }) {
   const editor = useEditor({
     extensions: [
@@ -469,6 +475,8 @@ export function PostEditor({
       Placeholder.configure({
         placeholder: placeholder ?? "Write something...",
       }),
+      ...(wikiPages ? [WikiLink.configure({ getItems: () => wikiPages })] : []),
+      ...(forumItems ? [ForumLink.configure({ getItems: () => forumItems })] : []),
     ],
     content: content ?? "",
     immediatelyRender: false,

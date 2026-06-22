@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import * as Tabs from "@radix-ui/react-tabs";
 import { UserCircle2 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
@@ -18,6 +19,7 @@ import type {
   WorldMember,
   WorldThread,
 } from "./types";
+import type { WikiLinkTarget } from "@/components/wiki-link";
 
 type PresenceUser = {
   user_id: string;
@@ -84,6 +86,7 @@ export function WorldWorkspace({
   characters,
   members,
   currentUser,
+  wikiPages,
 }: {
   worldId: string;
   worldSlug: string;
@@ -98,10 +101,34 @@ export function WorldWorkspace({
   characters: WorldCharacter[];
   members: WorldMember[];
   currentUser: { id: string; username: string; avatarUrl: string | null } | null;
+  wikiPages: WikiLinkTarget[];
 }) {
   const canManageMembers = isOwner || isAdmin;
-  const [selectedThread, setSelectedThread] = useState<WorldThread | null>(null);
-  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+
+  // Foundation for wiki cross-linking: open a thread/folder named in the URL
+  // on initial load only. Lazy initializers run once on mount, so this never
+  // re-reads the URL on later renders. Existing click-driven navigation is
+  // untouched and selection state never writes back into the URL.
+  const [selectedThread, setSelectedThread] = useState<WorldThread | null>(() => {
+    const threadId = searchParams.get("thread");
+    if (!threadId) return null;
+    const allThreads = folders.flatMap((folder) => folder.threads);
+    return allThreads.find((thread) => thread.id === threadId) ?? null;
+  });
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(() => {
+    const threadId = searchParams.get("thread");
+    if (threadId) {
+      const allThreads = folders.flatMap((folder) => folder.threads);
+      if (allThreads.some((thread) => thread.id === threadId)) {
+        return null;
+      }
+    }
+    const folderId = searchParams.get("folder");
+    if (!folderId) return null;
+    const match = folders.find((folder) => folder.id === folderId);
+    return match ? match.id : null;
+  });
   const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([]);
   const [guestId] = useState(() => crypto.randomUUID());
 
@@ -187,6 +214,9 @@ export function WorldWorkspace({
               onBack={() => setSelectedThread(null)}
               onRenamed={(title) => handleThreadRenamed(selectedThread.id, title)}
               onDeleted={() => handleThreadDeleted(selectedThread.id)}
+              wikiPages={wikiPages}
+              threads={folders.flatMap((folder) => folder.threads)}
+              folders={folders}
             />
           ) : (
             <Tabs.Root defaultValue="about">

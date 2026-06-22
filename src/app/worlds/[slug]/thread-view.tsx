@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -8,6 +8,8 @@ import { ArrowLeft, Lock, Pencil, Pin, Trash2, UserCircle2 } from "lucide-react"
 import { createClient } from "@/utils/supabase/client";
 import { ActionMenu } from "@/components/action-menu";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import type { WikiLinkTarget } from "@/components/wiki-link";
+import type { ForumLinkTarget } from "@/components/forum-link";
 import {
   createPost,
   deletePost,
@@ -20,6 +22,11 @@ import {
   type ThreadPost,
 } from "./actions";
 import { PostEditor } from "./post-editor";
+import {
+  renderWikiContent,
+  type ForumFolderSummary,
+  type ForumThreadSummary,
+} from "./wiki/wiki-content";
 
 export type SelectedThread = {
   id: string;
@@ -53,17 +60,30 @@ function PostItem({
   post,
   canManage,
   worldSlug,
+  wikiPages,
+  forumThreads,
+  forumFolders,
+  forumItems,
   onUpdated,
   onDeleted,
 }: {
   post: ThreadPost;
   canManage: boolean;
   worldSlug: string;
+  wikiPages: WikiLinkTarget[];
+  forumThreads: ForumThreadSummary[];
+  forumFolders: ForumFolderSummary[];
+  forumItems: ForumLinkTarget[];
   onUpdated: (postId: string, content: string) => void;
   onDeleted: (postId: string) => void;
 }) {
   const displayCharacter = post.character;
   const displayAuthor = post.author;
+
+  const resolvedContent = useMemo(
+    () => renderWikiContent(post.content, wikiPages, worldSlug, forumThreads, forumFolders),
+    [post.content, wikiPages, worldSlug, forumThreads, forumFolders],
+  );
 
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState(post.content);
@@ -172,6 +192,8 @@ function PostItem({
               autoFocus
               onChange={setEditContent}
               onEmptyChange={setEditEmpty}
+              wikiPages={wikiPages}
+              forumItems={forumItems}
             />
 
             {editError && <p className="mt-2 text-sm text-red-400">{editError}</p>}
@@ -197,7 +219,7 @@ function PostItem({
         ) : (
           <div
             className="tiptap-content mt-1"
-            dangerouslySetInnerHTML={{ __html: post.content }}
+            dangerouslySetInnerHTML={{ __html: resolvedContent }}
           />
         )}
       </div>
@@ -224,6 +246,9 @@ export function ThreadView({
   onBack,
   onRenamed,
   onDeleted,
+  wikiPages,
+  threads,
+  folders,
 }: {
   thread: SelectedThread;
   worldId: string;
@@ -233,6 +258,9 @@ export function ThreadView({
   onBack: () => void;
   onRenamed: (title: string) => void;
   onDeleted: () => void;
+  wikiPages?: WikiLinkTarget[];
+  threads?: ForumThreadSummary[];
+  folders?: ForumFolderSummary[];
 }) {
   const [posts, setPosts] = useState<ThreadPost[]>([]);
   const [postsThreadId, setPostsThreadId] = useState<string | null>(null);
@@ -251,6 +279,18 @@ export function ThreadView({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const router = useRouter();
+
+  const resolvedWikiPages = useMemo(() => wikiPages ?? [], [wikiPages]);
+  const resolvedThreads = useMemo(() => threads ?? [], [threads]);
+  const resolvedFolders = useMemo(() => folders ?? [], [folders]);
+
+  const forumItems = useMemo<ForumLinkTarget[]>(
+    () => [
+      ...resolvedFolders.map((f) => ({ id: f.id, label: f.name, type: "folder" as const })),
+      ...resolvedThreads.map((t) => ({ id: t.id, label: t.title, type: "thread" as const })),
+    ],
+    [resolvedFolders, resolvedThreads],
+  );
 
   const canManageThread = isOwner || currentUserId === thread.author_id;
 
@@ -559,6 +599,10 @@ export function ThreadView({
               post={post}
               canManage={isOwner || currentUserId === post.author_id}
               worldSlug={worldSlug}
+              wikiPages={resolvedWikiPages}
+              forumThreads={resolvedThreads}
+              forumFolders={resolvedFolders}
+              forumItems={forumItems}
               onUpdated={handlePostUpdated}
               onDeleted={handlePostDeleted}
             />
@@ -607,6 +651,8 @@ export function ThreadView({
               onChange={setContent}
               onEmptyChange={setIsEmpty}
               placeholder="Start the conversation..."
+              wikiPages={resolvedWikiPages}
+              forumItems={forumItems}
             />
           </div>
 

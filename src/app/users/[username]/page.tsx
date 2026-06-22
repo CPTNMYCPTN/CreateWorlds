@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { CalendarDays, Globe, Lock, UserCircle2 } from "lucide-react";
 import { Navbar } from "@/components/navbar";
 import { createClient } from "@/utils/supabase/server";
+import { getAcceptedFriends, getFriendshipBetween } from "@/app/friends/actions";
+import { FriendButton } from "./friend-button";
 
 export default async function UserProfilePage({
   params,
@@ -22,6 +24,17 @@ export default async function UserProfilePage({
   if (!profile) {
     notFound();
   }
+
+  const {
+    data: { user: viewer },
+  } = await supabase.auth.getUser();
+
+  const isOwnProfile = viewer?.id === profile.id;
+
+  const [friendship, friends] = await Promise.all([
+    viewer && !isOwnProfile ? getFriendshipBetween(viewer.id, profile.id) : Promise.resolve(null),
+    getAcceptedFriends(profile.id),
+  ]);
 
   const [{ data: characters }, { data: ownedWorldRows }, { data: memberWorldRows }] =
     await Promise.all([
@@ -100,6 +113,14 @@ export default async function UserProfilePage({
               Member since {memberSince}
             </p>
           </div>
+
+          {viewer && !isOwnProfile && (
+            <FriendButton
+              viewerId={viewer.id}
+              targetId={profile.id}
+              initialFriendship={friendship}
+            />
+          )}
         </div>
 
         {/* Characters */}
@@ -132,6 +153,43 @@ export default async function UserProfilePage({
                   <span className="line-clamp-2 text-sm font-medium text-zinc-200">
                     {character.name}
                   </span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Friends */}
+        <section className="mt-12">
+          <h2 className="text-xl font-semibold tracking-tight">Friends</h2>
+
+          {friends.length === 0 ? (
+            <p className="mt-4 text-sm text-zinc-500">No friends yet.</p>
+          ) : (
+            <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {friends.map((friend) => (
+                <Link
+                  key={friend.id}
+                  href={`/users/${friend.username}`}
+                  className="flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.02] p-5 text-center transition-colors hover:border-white/20 hover:bg-white/[0.04]"
+                >
+                  <div className="h-16 w-16 overflow-hidden rounded-full border border-white/10 bg-zinc-800">
+                    {friend.avatar_url ? (
+                      <Image
+                        src={friend.avatar_url}
+                        alt=""
+                        width={64}
+                        height={64}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <UserCircle2 className="h-full w-full text-zinc-600" />
+                    )}
+                  </div>
+                  <span className="line-clamp-2 text-sm font-medium text-zinc-200">
+                    {friend.display_name || friend.username}
+                  </span>
+                  <span className="text-xs text-zinc-500">@{friend.username}</span>
                 </Link>
               ))}
             </div>

@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { Sparkles } from "lucide-react";
+import { Sparkles, UserCheck } from "lucide-react";
 import { createClient } from "@/utils/supabase/server";
+import { getPendingIncomingCount } from "@/app/friends/actions";
+import { ChatToggleButton } from "./chat/chat-toggle-button";
 import { UserMenu } from "./user-menu";
 
 export async function Navbar() {
@@ -9,13 +11,16 @@ export async function Navbar() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: profile } = user
-    ? await supabase
-        .from("profiles")
-        .select("username, avatar_url")
-        .eq("id", user.id)
-        .maybeSingle()
-    : { data: null };
+  const [{ data: profile }, pendingFriendRequestCount] = await Promise.all([
+    user
+      ? supabase
+          .from("profiles")
+          .select("username, avatar_url")
+          .eq("id", user.id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    user ? getPendingIncomingCount(user.id) : Promise.resolve(0),
+  ]);
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-zinc-950/80 backdrop-blur-md">
@@ -29,7 +34,20 @@ export async function Navbar() {
         </Link>
 
         {user && profile ? (
-          <UserMenu username={profile.username} avatarUrl={profile.avatar_url ?? null} />
+          <div className="flex items-center gap-3">
+            <Link
+              href="/friends"
+              aria-label="Friends"
+              className="relative rounded-full p-2 text-zinc-400 transition-colors hover:bg-white/5 hover:text-white"
+            >
+              <UserCheck className="h-5 w-5" />
+              {pendingFriendRequestCount > 0 && (
+                <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[var(--world-accent,#a78bfa)] ring-2 ring-zinc-950" />
+              )}
+            </Link>
+            <ChatToggleButton loggedIn />
+            <UserMenu username={profile.username} avatarUrl={profile.avatar_url ?? null} />
+          </div>
         ) : user ? null : (
           <div className="flex items-center gap-3 text-sm font-medium">
             <Link

@@ -61,13 +61,23 @@ export default async function EditWikiPage({
     notFound();
   }
 
-  const { data: pages, error: pagesError } = await supabase
-    .from("wiki_pages")
-    .select("id, parent_page_id, slug, title, position")
-    .eq("world_id", world.id)
-    .order("position");
+  const [
+    { data: pages, error: pagesError },
+    { data: threads, error: threadsError },
+    { data: folders, error: foldersError },
+  ] = await Promise.all([
+    supabase
+      .from("wiki_pages")
+      .select("id, parent_page_id, slug, title, position")
+      .eq("world_id", world.id)
+      .order("position"),
+    supabase.from("world_threads").select("id, title").eq("world_id", world.id),
+    supabase.from("world_folders").select("id, name").eq("world_id", world.id),
+  ]);
 
   logWikiError("edit page wiki pages fetch failed", pagesError);
+  logWikiError("edit page world threads fetch failed", threadsError);
+  logWikiError("edit page world folders fetch failed", foldersError);
 
   return (
     <div>
@@ -77,6 +87,8 @@ export default async function EditWikiPage({
           worldId={world.id}
           worldSlug={slug}
           pages={pages ?? []}
+          threads={threads ?? []}
+          folders={folders ?? []}
           mode="edit"
           page={page}
         />
