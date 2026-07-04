@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
+import { sanitizeRichText } from "@/lib/sanitize";
 import type {
   HeaderStyle,
   MapHotspot,
@@ -163,7 +164,7 @@ export async function createPost(
     return { error: "You must be signed in to post." };
   }
 
-  const content = ((formData.get("content") as string) ?? "").trim();
+  const content = sanitizeRichText((formData.get("content") as string) ?? "").trim();
   const characterIdRaw = (formData.get("characterId") as string) ?? "";
   const characterId = characterIdRaw || null;
 
@@ -1221,7 +1222,7 @@ export async function updatePost(
     return { error: "You must be signed in to edit a post." };
   }
 
-  const trimmedContent = content.trim();
+  const trimmedContent = sanitizeRichText(content).trim();
 
   if (!trimmedContent) {
     return { error: "Post content is required." };

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
+import { sanitizeRichText } from "@/lib/sanitize";
 import { logWikiError } from "./log-error";
 
 const RESERVED_SLUGS = new Set(["new"]);
@@ -183,7 +184,7 @@ export async function createWikiPage(
   }
 
   const title = ((formData.get("title") as string) ?? "").trim();
-  const content = (formData.get("content") as string) ?? "";
+  const content = sanitizeRichText((formData.get("content") as string) ?? "");
   const parentPageIdRaw = (formData.get("parentPageId") as string) ?? "";
   const parentPageId = parentPageIdRaw || null;
 
@@ -249,7 +250,7 @@ export async function updateWikiPage(
   }
 
   const title = ((formData.get("title") as string) ?? "").trim();
-  const content = (formData.get("content") as string) ?? "";
+  const content = sanitizeRichText((formData.get("content") as string) ?? "");
   const parentPageIdRaw = (formData.get("parentPageId") as string) ?? "";
   const parentPageId = parentPageIdRaw || null;
   const requestedSlugRaw = ((formData.get("slug") as string) ?? "").trim();
