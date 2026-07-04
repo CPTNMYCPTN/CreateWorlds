@@ -30,83 +30,14 @@ export default async function InvitePage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const now = new Date().toISOString();
-
-  const { data: invite, error: inviteError } = await supabase
-    .from("world_invites")
-    .select("id, code, expires_at, max_uses, uses, world_id")
-    .eq("code", code)
-    .single();
-
-  if (inviteError || !invite) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-6 py-16 text-zinc-50">
-        <div className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-900 p-8 text-center">
-          <h1 className="text-2xl font-semibold">Invalid invite</h1>
-          <p className="mt-2 text-sm text-zinc-400">
-            This invite link is invalid or has expired.
-          </p>
-          <Link
-            href="/"
-            className="mt-6 inline-flex items-center justify-center rounded-full bg-violet-500 px-5 py-2.5 text-sm font-semibold text-white"
-          >
-            Go home
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  const isExpired = !!invite.expires_at && invite.expires_at <= now;
-  const isMaxedOut = invite.max_uses !== null && invite.uses >= invite.max_uses;
-
-  // Bypasses the normal worlds RLS (which hides private worlds from
-  // non-members) so the preview can render before the viewer has joined.
-  const { data: worldRows } = await supabase.rpc("get_invite_world", {
+  // world_invites is no longer directly readable (its public select policy
+  // let anyone enumerate codes) — invalid/expired/valid comes from a
+  // security-definer RPC that looks up the exact code only.
+  const { data: inviteStatus } = await supabase.rpc("get_invite_status", {
     invite_code: code,
   });
 
-  const world = (worldRows?.[0] as InviteWorldPreview | undefined) ?? null;
-
-  if (!world) {
-    if (isExpired || isMaxedOut) {
-      return (
-        <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-6 py-16 text-zinc-50">
-          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-900 p-8 text-center">
-            <h1 className="text-2xl font-semibold">Invite unavailable</h1>
-            <p className="mt-2 text-sm text-zinc-400">
-              This invite link has expired or reached its usage limit.
-            </p>
-            <Link
-              href="/"
-              className="mt-6 inline-flex items-center justify-center rounded-full bg-violet-500 px-5 py-2.5 text-sm font-semibold text-white"
-            >
-              Go home
-            </Link>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-6 py-16 text-zinc-50">
-        <div className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-900 p-8 text-center">
-          <h1 className="text-2xl font-semibold">Invalid invite</h1>
-          <p className="mt-2 text-sm text-zinc-400">
-            This invite link is invalid or has expired.
-          </p>
-          <Link
-            href="/"
-            className="mt-6 inline-flex items-center justify-center rounded-full bg-violet-500 px-5 py-2.5 text-sm font-semibold text-white"
-          >
-            Go home
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  if (isExpired || isMaxedOut) {
+  if (inviteStatus === "expired_or_maxed") {
     return (
       <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-6 py-16 text-zinc-50">
         <div className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-900 p-8 text-center">
@@ -115,10 +46,39 @@ export default async function InvitePage({
             This invite link has expired or reached its usage limit.
           </p>
           <Link
-            href={`/worlds/${world.slug}`}
+            href="/"
             className="mt-6 inline-flex items-center justify-center rounded-full bg-violet-500 px-5 py-2.5 text-sm font-semibold text-white"
           >
-            View world
+            Go home
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Bypasses the normal worlds RLS (which hides private worlds from
+  // non-members) so the preview can render before the viewer has joined.
+  // Returns nothing for invalid/expired codes.
+  const { data: worldRows } =
+    inviteStatus === "valid"
+      ? await supabase.rpc("get_invite_world", { invite_code: code })
+      : { data: null };
+
+  const world = (worldRows?.[0] as InviteWorldPreview | undefined) ?? null;
+
+  if (!world) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-6 py-16 text-zinc-50">
+        <div className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-900 p-8 text-center">
+          <h1 className="text-2xl font-semibold">Invalid invite</h1>
+          <p className="mt-2 text-sm text-zinc-400">
+            This invite link is invalid or has expired.
+          </p>
+          <Link
+            href="/"
+            className="mt-6 inline-flex items-center justify-center rounded-full bg-violet-500 px-5 py-2.5 text-sm font-semibold text-white"
+          >
+            Go home
           </Link>
         </div>
       </div>

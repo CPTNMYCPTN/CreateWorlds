@@ -4,16 +4,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 
-type InviteWorldPreview = {
-  id: string;
-  name: string;
-  slug: string;
-  description: string | null;
-  is_public: boolean;
-  banner_url: string | null;
-  icon_url: string | null;
-};
-
+// Joining happens in a single security-definer RPC (see
+// supabase/migrations/20260704_invite_join_rpc_rls.sql): it validates the
+// code, checks expiry/usage under a row lock, inserts the membership, and
+// increments uses only for genuinely new members. This replaces the old
+// multi-query flow, which raced on the uses counter and depended on
+// world_members/world_invites RLS loose enough to enumerate invite codes.
 export async function joinWorldFromInvite(code: string) {
   const supabase = await createClient();
 
@@ -25,83 +21,27 @@ export async function joinWorldFromInvite(code: string) {
     redirect(`/login?redirectTo=${encodeURIComponent(`/invite/${code}`)}`);
   }
 
-  const now = new Date().toISOString();
-
-  const { data: invite, error: inviteError } = await supabase
-    .from("world_invites")
-    .select("id, world_id, code, expires_at, max_uses, uses")
-    .eq("code", code)
-    .single();
-
-  if (inviteError || !invite) {
-    redirect(`/invite/${code}?error=${encodeURIComponent("This invite link is invalid.")}`);
-  }
-
-  const isExpired = !!invite.expires_at && invite.expires_at <= now;
-  const isMaxedOut = invite.max_uses !== null && invite.uses >= invite.max_uses;
-
-  if (isExpired || isMaxedOut) {
-    redirect(
-      `/invite/${code}?error=${encodeURIComponent("This invite link has expired or reached its usage limit.")}`,
-    );
-  }
-
-  // Bypasses the normal worlds RLS (which hides private worlds from
-  // non-members) so we can resolve the slug to join/redirect to.
-  const { data: worldRows } = await supabase.rpc("get_invite_world", {
+  const { data, error } = await supabase.rpc("join_world_from_invite", {
     invite_code: code,
   });
 
-  const world = (worldRows?.[0] as InviteWorldPreview | undefined) ?? null;
-
-  if (!world) {
-    redirect(`/invite/${code}?error=${encodeURIComponent("This invite link is invalid.")}`);
+  if (error) {
+    const friendly = error.message.includes("invalid_invite")
+      ? "This invite link is invalid."
+      : error.message.includes("invite_expired_or_maxed")
+        ? "This invite link has expired or reached its usage limit."
+        : error.message;
+    redirect(`/invite/${code}?error=${encodeURIComponent(friendly)}`);
   }
 
-  const { data: existingMembership } = await supabase
-    .from("world_members")
-    .select("user_id")
-    .eq("world_id", invite.world_id)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const slug = (data?.[0] as { world_slug: string } | undefined)?.world_slug;
 
-  if (existingMembership) {
-    redirect(`/worlds/${world.slug}`);
-  }
-
-  const { error: memberError } = await supabase.from("world_members").insert({
-    world_id: invite.world_id,
-    user_id: user.id,
-    role: "member",
-  });
-
-  // Postgres unique_violation: a concurrent request already inserted this
-  // membership between our pre-check above and this insert. Check this
-  // BEFORE any generic error logging/handling below, and bail out straight
-  // to the success redirect — this is not a real failure, so it must never
-  // reach the generic handler, get logged as an error, or increment uses.
-  if (memberError?.code === "23505") {
-    revalidatePath(`/worlds/${world.slug}`);
-    redirect(`/worlds/${world.slug}`);
-  }
-
-  if (memberError) {
+  if (!slug) {
     redirect(
-      `/invite/${code}?error=${encodeURIComponent(memberError.message)}`,
+      `/invite/${code}?error=${encodeURIComponent("This invite link is invalid.")}`,
     );
   }
 
-  const { error: updateError } = await supabase
-    .from("world_invites")
-    .update({ uses: invite.uses + 1 })
-    .eq("id", invite.id);
-
-  if (updateError) {
-    redirect(
-      `/invite/${code}?error=${encodeURIComponent(updateError.message)}`,
-    );
-  }
-
-  revalidatePath(`/worlds/${world.slug}`);
-  redirect(`/worlds/${world.slug}`);
+  revalidatePath(`/worlds/${slug}`);
+  redirect(`/worlds/${slug}`);
 }

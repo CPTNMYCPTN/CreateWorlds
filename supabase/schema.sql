@@ -78,22 +78,16 @@ create policy "Members are visible to other members of the same world"
     )
   );
 
-create policy "Users can join worlds they are invited to or public worlds"
+-- Invite-based joins go through join_world_from_invite (security definer,
+-- below) — direct inserts are only for public worlds and for owners creating
+-- their own membership row at world creation.
+create policy "Users can join public worlds or worlds they own"
   on public.world_members for insert
   with check (
     user_id = auth.uid()
-    and (
-      exists (
-        select 1 from public.worlds w
-        where w.id = world_id and (
-          w.is_public
-          or w.owner_id = auth.uid()
-        )
-      )
-      or exists (
-        select 1 from public.world_invites i
-        where i.world_id = world_id
-      )
+    and exists (
+      select 1 from public.worlds w
+      where w.id = world_id and (w.is_public or w.owner_id = auth.uid())
     )
   );
 
@@ -135,9 +129,10 @@ create policy "Owners and admins can remove members"
     )
   );
 
-create policy "Anyone can read invites by code"
-  on public.world_invites for select
-  using (true);
+-- Note: no public select policy on world_invites — that would let anyone
+-- enumerate codes. Non-owners interact with invites only through the
+-- security-definer functions below (get_invite_status / get_invite_world /
+-- join_world_from_invite), which look up by exact code.
 
 create policy "Owners can manage invites for their worlds"
   on public.world_invites for all
@@ -183,6 +178,80 @@ $$;
 
 revoke all on function public.get_invite_world(text) from public;
 grant execute on function public.get_invite_world(text) to anon, authenticated;
+
+-- Invite status for the preview page (invalid vs expired vs valid). Lookup
+-- is by exact code, so nothing is enumerable.
+create or replace function public.get_invite_status(invite_code text)
+returns text
+language sql
+security definer
+set search_path = public, pg_temp
+stable
+as $$
+  select case
+    when i.id is null then 'invalid'
+    when (i.expires_at is not null and i.expires_at <= now())
+      or (i.max_uses is not null and i.uses >= i.max_uses) then 'expired_or_maxed'
+    else 'valid'
+  end
+  from (select 1) as one
+  left join public.world_invites i on i.code = invite_code;
+$$;
+
+revoke all on function public.get_invite_status(text) from public;
+grant execute on function public.get_invite_status(text) to anon, authenticated;
+
+-- Atomic, code-gated join: validates the invite under a row lock, inserts
+-- the membership, and consumes a use only for genuinely new members.
+create or replace function public.join_world_from_invite(invite_code text)
+returns table (world_slug text, status text)
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_invite record;
+  v_slug text;
+  v_rowcount integer;
+begin
+  if auth.uid() is null then
+    raise exception 'not_authenticated';
+  end if;
+
+  select i.id, i.world_id, i.expires_at, i.max_uses, i.uses
+  into v_invite
+  from public.world_invites i
+  where i.code = invite_code
+  for update;
+
+  if not found then
+    raise exception 'invalid_invite';
+  end if;
+
+  if (v_invite.expires_at is not null and v_invite.expires_at <= now())
+     or (v_invite.max_uses is not null and v_invite.uses >= v_invite.max_uses) then
+    raise exception 'invite_expired_or_maxed';
+  end if;
+
+  select w.slug into v_slug from public.worlds w where w.id = v_invite.world_id;
+
+  insert into public.world_members (world_id, user_id, role)
+  values (v_invite.world_id, auth.uid(), 'member')
+  on conflict (world_id, user_id) do nothing;
+
+  get diagnostics v_rowcount = row_count;
+
+  if v_rowcount = 1 then
+    update public.world_invites set uses = uses + 1 where id = v_invite.id;
+    return query select v_slug, 'joined'::text;
+  else
+    return query select v_slug, 'already_member'::text;
+  end if;
+end;
+$$;
+
+revoke all on function public.join_world_from_invite(text) from public;
+grant execute on function public.join_world_from_invite(text) to authenticated;
 
 -- Storage ------------------------------------------------------------
 
