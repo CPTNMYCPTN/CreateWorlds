@@ -103,6 +103,7 @@ export async function createThread(
 
 export type ThreadPostAuthor = {
   username: string;
+  display_name: string | null;
   avatar_url: string | null;
 };
 
@@ -128,7 +129,7 @@ export async function getThreadPosts(threadId: string): Promise<ThreadPost[]> {
   const { data, error } = await supabase
     .from("world_posts")
     .select(
-      "id, content, created_at, author_id, character_id, author:profiles(username, avatar_url), character:characters(id, name, avatar_url)",
+      "id, content, created_at, author_id, character_id, author:profiles(username, display_name, avatar_url), character:characters(id, name, avatar_url)",
     )
     .eq("thread_id", threadId)
     .order("created_at");
@@ -204,7 +205,7 @@ export async function createPost(
       content,
     })
     .select(
-      "id, content, created_at, author_id, character_id, author:profiles(username, avatar_url), character:characters(id, name, avatar_url)",
+      "id, content, created_at, author_id, character_id, author:profiles(username, display_name, avatar_url), character:characters(id, name, avatar_url)",
     )
     .single();
 

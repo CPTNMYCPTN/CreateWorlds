@@ -127,9 +127,19 @@ function PostItem({
 
   return (
     <div className="group flex gap-3 rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-      <PostAuthorAvatar
-        avatarUrl={displayCharacter?.avatar_url ?? displayAuthor?.avatar_url}
-      />
+      {displayCharacter ? (
+        <Link href={`/characters/${displayCharacter.id}`} className="shrink-0">
+          <PostAuthorAvatar
+            avatarUrl={displayCharacter.avatar_url ?? displayAuthor?.avatar_url}
+          />
+        </Link>
+      ) : displayAuthor ? (
+        <Link href={`/users/${displayAuthor.username}`} className="shrink-0">
+          <PostAuthorAvatar avatarUrl={displayAuthor.avatar_url} />
+        </Link>
+      ) : (
+        <PostAuthorAvatar avatarUrl={null} />
+      )}
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-2">
           {displayCharacter ? (
@@ -144,14 +154,20 @@ function PostItem({
               href={`/users/${displayAuthor.username}`}
               className="text-sm font-semibold text-zinc-200 transition-colors hover:text-white"
             >
-              {displayAuthor.username}
+              {displayAuthor.display_name || displayAuthor.username}
             </Link>
           ) : (
             <span className="text-sm font-semibold text-zinc-500">Unknown</span>
           )}
           {displayCharacter && displayAuthor ? (
             <span className="text-xs text-zinc-500">
-              by @{displayAuthor.username}
+              by{" "}
+              <Link
+                href={`/users/${displayAuthor.username}`}
+                className="transition-colors hover:text-zinc-300"
+              >
+                {displayAuthor.display_name || `@${displayAuthor.username}`}
+              </Link>
             </span>
           ) : null}
           <span className="text-xs text-zinc-500">
@@ -359,7 +375,7 @@ export function ThreadView({
           const [{ data: author }, { data: character }] = await Promise.all([
             supabase
               .from("profiles")
-              .select("username, avatar_url")
+              .select("username, display_name, avatar_url")
               .eq("id", newPost.author_id)
               .single(),
             newPost.character_id

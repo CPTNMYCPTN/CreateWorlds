@@ -38,7 +38,7 @@ type NotificationRow = {
     title: string;
     world: { id: string; name: string; slug: string } | null;
   } | null;
-  author: { username: string } | null;
+  author: { username: string; display_name: string | null } | null;
 };
 
 type CharacterWorldRow = {
@@ -114,7 +114,7 @@ export default async function Home() {
         ? await supabase
             .from("world_posts")
             .select(
-              "id, created_at, thread:world_threads(id, title, world:worlds(id, name, slug)), author:profiles(username)",
+              "id, created_at, thread:world_threads(id, title, world:worlds(id, name, slug)), author:profiles(username, display_name)",
             )
             .in("thread_id", threadIds)
             .neq("author_id", user.id)
@@ -268,7 +268,9 @@ export default async function Home() {
                   <div className="min-w-0">
                     <p className="text-sm text-zinc-200">
                       <span className="font-medium text-zinc-100">
-                        {notification.author?.username ?? "Someone"}
+                        {notification.author
+                          ? notification.author.display_name || notification.author.username
+                          : "Someone"}
                       </span>{" "}
                       replied in{" "}
                       <span className="font-medium text-zinc-100">

@@ -15,10 +15,13 @@ export default async function UserProfilePage({
   const { username } = await params;
   const supabase = await createClient();
 
+  // Case-insensitive to agree with the unique index on lower(username) —
+  // an exact .eq() would 404 on a wrong-case URL. Escape %/_ so usernames
+  // containing them (common in email-derived names) aren't LIKE wildcards.
   const { data: profile } = await supabase
     .from("profiles")
     .select("id, username, display_name, bio, avatar_url, created_at")
-    .eq("username", username)
+    .ilike("username", username.replace(/([\\%_])/g, "\\$1"))
     .maybeSingle();
 
   if (!profile) {
@@ -102,7 +105,7 @@ export default async function UserProfilePage({
 
           <div className="flex-1">
             <h1 className="text-3xl font-semibold tracking-tight">
-              {profile.display_name ?? profile.username}
+              {profile.display_name || profile.username}
             </h1>
             <p className="mt-1 text-sm text-zinc-500">@{profile.username}</p>
             {profile.bio && (

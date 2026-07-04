@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { UserCircle2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -79,7 +80,10 @@ function MemberRow({
 
   return (
     <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-white/10 bg-zinc-800">
+      <Link
+        href={`/users/${member.username}`}
+        className="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-white/10 bg-zinc-800"
+      >
         {member.avatar_url ? (
           <Image
             src={member.avatar_url}
@@ -91,13 +95,16 @@ function MemberRow({
         ) : (
           <UserCircle2 className="h-full w-full text-zinc-600" />
         )}
-      </div>
+      </Link>
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium text-zinc-100">
+          <Link
+            href={`/users/${member.username}`}
+            className="truncate text-sm font-medium text-zinc-100 transition-colors hover:text-white"
+          >
             {displayName}
-          </span>
+          </Link>
           {member.role === "owner" && (
             <span className="shrink-0 rounded-full bg-[var(--world-accent)]/20 px-2 py-0.5 text-xs font-semibold text-[var(--world-accent)]">
               Owner

@@ -186,7 +186,7 @@ export default async function WikiPageView({
                 href={`/users/${creatorProfile.username}`}
                 className="hover:text-zinc-300"
               >
-                @{creatorProfile.username}
+                {creatorProfile.display_name || `@${creatorProfile.username}`}
               </Link>
             </p>
           )}

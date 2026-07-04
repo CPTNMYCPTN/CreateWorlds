@@ -114,7 +114,7 @@ export default async function WorldPage({
     user
       ? supabase
           .from("profiles")
-          .select("username, avatar_url")
+          .select("username, display_name, avatar_url")
           .eq("id", user.id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -193,6 +193,7 @@ export default async function WorldPage({
     ? {
         id: user.id,
         username: profile?.username ?? "Anonymous",
+        displayName: profile?.display_name ?? null,
         avatarUrl: profile?.avatar_url ?? null,
       }
     : null;

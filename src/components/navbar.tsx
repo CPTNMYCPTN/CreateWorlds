@@ -15,7 +15,7 @@ export async function Navbar() {
     user
       ? supabase
           .from("profiles")
-          .select("username, avatar_url")
+          .select("username, display_name, avatar_url")
           .eq("id", user.id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -46,7 +46,11 @@ export async function Navbar() {
               )}
             </Link>
             <ChatToggleButton loggedIn />
-            <UserMenu username={profile.username} avatarUrl={profile.avatar_url ?? null} />
+            <UserMenu
+              username={profile.username}
+              displayName={profile.display_name ?? null}
+              avatarUrl={profile.avatar_url ?? null}
+            />
           </div>
         ) : user ? null : (
           <div className="flex items-center gap-3 text-sm font-medium">

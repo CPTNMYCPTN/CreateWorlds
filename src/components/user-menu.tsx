@@ -8,9 +8,11 @@ import { logout } from "@/app/actions";
 
 export function UserMenu({
   username,
+  displayName,
   avatarUrl,
 }: {
   username: string;
+  displayName: string | null;
   avatarUrl: string | null;
 }) {
   const [open, setOpen] = useState(false);
@@ -33,7 +35,7 @@ export function UserMenu({
         ) : (
           <UserCircle2 className="h-5 w-5" />
         )}
-        <span>{username}</span>
+        <span>{displayName || username}</span>
         <ChevronDown className="h-3.5 w-3.5 text-zinc-500" />
       </button>
 

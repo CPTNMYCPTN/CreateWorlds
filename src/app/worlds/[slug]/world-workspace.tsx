@@ -24,13 +24,15 @@ import type { WikiLinkTarget } from "@/components/wiki-link";
 type PresenceUser = {
   user_id: string;
   username: string;
+  display_name?: string | null;
   avatar_url: string | null;
 };
 
 function PresenceAvatar({ user }: { user: PresenceUser }) {
   return (
-    <div
-      title={user.username}
+    <Link
+      href={`/users/${user.username}`}
+      title={user.display_name || user.username}
       className="relative h-8 w-8 shrink-0 rounded-full ring-2 ring-zinc-950"
     >
       {user.avatar_url ? (
@@ -45,7 +47,7 @@ function PresenceAvatar({ user }: { user: PresenceUser }) {
         <UserCircle2 className="h-8 w-8 text-zinc-600" />
       )}
       <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-zinc-950 bg-emerald-400" />
-    </div>
+    </Link>
   );
 }
 
@@ -100,7 +102,12 @@ export function WorldWorkspace({
   threadSnippets: Record<string, string>;
   characters: WorldCharacter[];
   members: WorldMember[];
-  currentUser: { id: string; username: string; avatarUrl: string | null } | null;
+  currentUser: {
+    id: string;
+    username: string;
+    displayName: string | null;
+    avatarUrl: string | null;
+  } | null;
   wikiPages: WikiLinkTarget[];
 }) {
   const canManageMembers = isOwner || isAdmin;
@@ -171,6 +178,7 @@ export function WorldWorkspace({
           await channel.track({
             user_id: key,
             username: currentUser?.username ?? "Guest",
+            display_name: currentUser?.displayName ?? null,
             avatar_url: currentUser?.avatarUrl ?? null,
           });
         }

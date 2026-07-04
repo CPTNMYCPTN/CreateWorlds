@@ -355,17 +355,43 @@ alter table public.profiles
   add column if not exists display_name text,
   add column if not exists bio text;
 
--- Create a profile automatically whenever a new user signs up.
+-- Usernames back /users/[username] routes, so they must be unique.
+-- Case-insensitive so "Foo" and "foo" can't coexist.
+create unique index if not exists profiles_username_unique
+  on public.profiles (lower(username));
+
+-- Create a profile automatically whenever a new user signs up. The username
+-- is derived from the email prefix; on collision, append 2, 3, ... The
+-- insert itself is the collision check (retry on unique_violation), so
+-- concurrent signups with the same prefix can't race past a pre-check.
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer set search_path = public
 as $$
+declare
+  base text;
+  candidate text;
+  n integer := 1;
 begin
-  insert into public.profiles (id, username)
-  values (new.id, split_part(new.email, '@', 1))
-  on conflict (id) do nothing;
-  return new;
+  base := lower(split_part(new.email, '@', 1));
+  if base = '' then
+    base := 'user';
+  end if;
+
+  candidate := base;
+
+  loop
+    begin
+      insert into public.profiles (id, username)
+      values (new.id, candidate)
+      on conflict (id) do nothing;
+      return new;
+    exception when unique_violation then
+      n := n + 1;
+      candidate := base || n::text;
+    end;
+  end loop;
 end;
 $$;
 
