@@ -17,15 +17,7 @@ export async function signup(formData: FormData) {
     );
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-
-  const { error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      emailRedirectTo: `${siteUrl}/auth/confirm`,
-    },
-  });
+  const { data, error } = await supabase.auth.signUp({ email, password });
 
   if (error) {
     redirect(
@@ -33,7 +25,14 @@ export async function signup(formData: FormData) {
     );
   }
 
-  redirect(
-    `/login?message=${encodeURIComponent("Check your email to confirm your account")}&redirectTo=${encodeURIComponent(redirectTo)}`,
-  );
+  // Email confirmation is disabled in Supabase, so signUp returns a session
+  // and the user is signed in immediately. A null session means confirmation
+  // got re-enabled — fall back to the old check-your-email flow.
+  if (!data.session) {
+    redirect(
+      `/login?message=${encodeURIComponent("Check your email to confirm your account")}&redirectTo=${encodeURIComponent(redirectTo)}`,
+    );
+  }
+
+  redirect(redirectTo);
 }
